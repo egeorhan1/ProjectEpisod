@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class ShowForumScreen extends StatefulWidget {
+class ForumScreen extends StatefulWidget {
   final int showId;
   final String showName;
+  final int? seasonNumber; // Doluysa Bölüm forumudur, boşsa Dizi forumudur
+  final int? episodeNumber;
 
-  const ShowForumScreen({super.key, required this.showId, required this.showName});
+  const ForumScreen({
+    super.key,
+    required this.showId,
+    required this.showName,
+    this.seasonNumber,
+    this.episodeNumber
+  });
 
   @override
-  State<ShowForumScreen> createState() => _ShowForumScreenState();
+  State<ForumScreen> createState() => _ForumScreenState();
 }
 
-class _ShowForumScreenState extends State<ShowForumScreen> {
+class _ForumScreenState extends State<ForumScreen> {
   final _supabase = Supabase.instance.client;
   final _commentController = TextEditingController();
   final _focusNode = FocusNode();
@@ -19,12 +27,11 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
   List comments = [];
   List userLikes = [];
   Map? replyingTo;
-
-  // YENİ: Hangi yorumların yanıtları açık? (Açık olanların ID'sini tutar)
   final Set<int> _expandedReplies = {};
-
-  // YENİ: Sıralama seçeneği
   String _currentSort = 'Newest';
+
+  // Hangi forumda olduğumuzu anlıyoruz
+  bool get isEpisodeForum => widget.seasonNumber != null && widget.episodeNumber != null;
 
   @override
   void initState() {
@@ -35,9 +42,23 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
   Future<void> _fetchData() async {
     try {
       final user = _supabase.auth.currentUser;
+
+      // FORUM SİHRİ: Sadece 'rating' sütunu NULL olanları çekiyoruz (Yıldızlı incelemeler Reviews sayfasına gidecek)
+      var query = _supabase
+          .from('comments')
+          .select('*, profiles(username), comment_likes(count)')
+          .eq('show_id', widget.showId)
+          .isFilter('rating', null);
+
+      // Eğer bölüm forumundaysak bölüme göre filtrele, yoksa sadece diziye ait (sezonu null olan) yorumları getir
+      if (isEpisodeForum) {
+        query = query.eq('season_number', widget.seasonNumber!).eq('episode_number', widget.episodeNumber!);
+      } else {
+        query = query.isFilter('season_number', null);
+      }
+
       final results = await Future.wait<dynamic>([
-        // Tüm yorumları çeker (Sıralamayı Flutter tarafında yapacağız)
-        _supabase.from('comments').select('*, profiles(username), comment_likes(count)').eq('show_id', widget.showId).isFilter('season_number', null),
+        query,
         if (user != null) _supabase.from('comment_likes').select('comment_id').eq('user_id', user.id) else Future.value([]),
       ]);
 
@@ -47,10 +68,11 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
           userLikes = (results[1] as List).map((l) => l['comment_id']).toList();
         });
       }
-    } catch (e) { debugPrint("Forum error: $e"); }
+    } catch (e) {
+      debugPrint("Forum error: $e");
+    }
   }
 
-  // Yardımcı fonksiyonlar: Beğeni ve Yanıt sayılarını güvenli çeker
   int _getLikes(Map c) => c['comment_likes'] != null && c['comment_likes'].isNotEmpty ? (c['comment_likes'][0]['count'] ?? 0) : 0;
   int _getReplyCount(Map c) => comments.where((r) => r['parent_id'] == c['id']).length;
 
@@ -61,14 +83,14 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
     final user = _supabase.auth.currentUser;
     _commentController.clear();
 
-    // Eğer birine yanıt veriyorsak, o yorumun reply'larını otomatik aç ki yazdığını görsün
-    if (replyingTo != null) {
-      _expandedReplies.add(replyingTo!['id']);
-    }
+    // Yanıt veriyorsak sekmesini otomatik aç
+    if (replyingTo != null) _expandedReplies.add(replyingTo!['id']);
 
     await _supabase.from('comments').insert({
       'user_id': user!.id,
       'show_id': widget.showId,
+      'season_number': widget.seasonNumber,   // Null ise diziye, doluysa bölüme kaydeder
+      'episode_number': widget.episodeNumber,
       'content': text,
       'parent_id': replyingTo?['id'],
     });
@@ -92,45 +114,35 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Sadece Ana Yorumları (Parent) al
+    // Sadece ana yorumları al ve sırala
     List mainComments = comments.where((c) => c['parent_id'] == null).toList();
-
-    // 2. Sıralama Mantığı (Flutter üzerinde dinamik sıralama)
     mainComments.sort((a, b) {
-      if (_currentSort == 'Top Liked') {
-        return _getLikes(b).compareTo(_getLikes(a)); // En çok beğenilen en üste
-      } else if (_currentSort == 'Most Discussed') {
-        return _getReplyCount(b).compareTo(_getReplyCount(a)); // En çok yanıt alan en üste
-      } else {
-        // Newest (En Yeni)
-        return DateTime.parse(b['created_at']).compareTo(DateTime.parse(a['created_at']));
-      }
+      if (_currentSort == 'Top Liked') return _getLikes(b).compareTo(_getLikes(a));
+      if (_currentSort == 'Most Discussed') return _getReplyCount(b).compareTo(_getReplyCount(a));
+      return DateTime.parse(b['created_at']).compareTo(DateTime.parse(a['created_at']));
     });
+
+    // Başlığı duruma göre ayarla
+    String title = isEpisodeForum ? "S${widget.seasonNumber} E${widget.episodeNumber} Forum" : "${widget.showName} Forum";
 
     return Scaffold(
       backgroundColor: const Color(0xFF14181C),
       appBar: AppBar(
         backgroundColor: const Color(0xFF14181C),
-        title: Text("${widget.showName} Forum", style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        title: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
         centerTitle: true,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: () => Navigator.pop(context)),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.white), onPressed: () => Navigator.pop(context)),
         actions: [
-          // YENİ: SIRALAMA BUTONU
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort, color: Colors.white, size: 22),
             color: const Color(0xFF2C3440),
-            onSelected: (value) {
-              if (value == 'Top Authors') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Follower sorting requires the Follow system! Coming next.")));
-                return;
-              }
-              setState(() => _currentSort = value);
-            },
+            onSelected: (value) => setState(() => _currentSort = value),
             itemBuilder: (context) => [
               _buildPopupItem('Newest', Icons.access_time),
               _buildPopupItem('Top Liked', Icons.thumb_up_alt_outlined),
               _buildPopupItem('Most Discussed', Icons.forum_outlined),
-              _buildPopupItem('Top Authors', Icons.people_outline), // Takip sistemi gelince çalışacak
             ],
           )
         ],
@@ -140,15 +152,16 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _fetchData,
-              child: ListView.builder(
+              color: const Color(0xFF00E054),
+              backgroundColor: const Color(0xFF1E2329),
+              child: mainComments.isEmpty
+                  ? const Center(child: Text("Be the first to start the discussion!", style: TextStyle(color: Colors.white24)))
+                  : ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: mainComments.length,
                 itemBuilder: (context, i) {
                   final parent = mainComments[i];
-                  // Bu ana yoruma ait yanıtları eskiden yeniye (Thread mantığı) sıralayarak bul
-                  final replies = comments.where((c) => c['parent_id'] == parent['id']).toList()
-                    ..sort((a, b) => DateTime.parse(a['created_at']).compareTo(DateTime.parse(b['created_at'])));
-
+                  final replies = comments.where((c) => c['parent_id'] == parent['id']).toList()..sort((a, b) => DateTime.parse(a['created_at']).compareTo(DateTime.parse(b['created_at'])));
                   final bool isExpanded = _expandedReplies.contains(parent['id']);
 
                   return Column(
@@ -157,7 +170,7 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
                       // ANA YORUM
                       _buildCommentTile(parent, isReply: false),
 
-                      // YOUTUBE TARZI YANITLARI GÖSTER/GİZLE BUTONU
+                      // YANITLARI GÖSTER/GİZLE BUTONU
                       if (replies.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(left: 44, top: 4, bottom: 8),
@@ -178,12 +191,9 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
                           ),
                         ),
 
-                      // YANITLAR (Sadece isExpanded true ise renderlanır)
+                      // YANITLAR
                       if (isExpanded)
-                        ...replies.map((r) => Padding(
-                            padding: const EdgeInsets.only(left: 44, bottom: 8),
-                            child: _buildCommentTile(r, isReply: true)
-                        )),
+                        ...replies.map((r) => Padding(padding: const EdgeInsets.only(left: 44, bottom: 8), child: _buildCommentTile(r, isReply: true))),
 
                       const Divider(color: Colors.white10, height: 32),
                     ],
@@ -192,6 +202,8 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
               ),
             ),
           ),
+
+          // İŞTE YARIM KALAN O GÜZELİM MESAJ YAZMA KUTUSU BURASI
           _buildInputArea(),
         ],
       ),
@@ -212,8 +224,6 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
   Widget _buildCommentTile(Map c, {required bool isReply}) {
     final bool isLiked = userLikes.contains(c['id']);
     final int likeCount = _getLikes(c);
-
-    // Ne zaman atıldı hesabı (Örn: 2h ago)
     final Duration diff = DateTime.now().difference(DateTime.parse(c['created_at']).toLocal());
     String timeAgo = diff.inDays > 0 ? "${diff.inDays}d" : diff.inHours > 0 ? "${diff.inHours}h" : diff.inMinutes > 0 ? "${diff.inMinutes}m" : "now";
 
@@ -222,7 +232,11 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(radius: isReply ? 12 : 16, backgroundColor: Colors.white10, child: Text(c['profiles']['username'][0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontSize: 10))),
+          CircleAvatar(
+              radius: isReply ? 12 : 16,
+              backgroundColor: const Color(0xFF2C3440),
+              child: Text(c['profiles']['username'][0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontSize: 10, fontWeight: FontWeight.bold))
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -240,6 +254,7 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
+                    // BEĞEN BUTONU
                     GestureDetector(
                       onTap: () => _toggleLike(c['id']),
                       child: Row(children: [
@@ -249,9 +264,13 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
                       ]),
                     ),
                     const SizedBox(width: 24),
+                    // YANITLA BUTONU
                     if (!isReply)
                       GestureDetector(
-                        onTap: () { setState(() => replyingTo = c); _focusNode.requestFocus(); },
+                        onTap: () {
+                          setState(() => replyingTo = c);
+                          _focusNode.requestFocus();
+                        },
                         child: const Text("Reply", style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
                       ),
                   ],
@@ -264,25 +283,55 @@ class _ShowForumScreenState extends State<ShowForumScreen> {
     );
   }
 
+  // YARIM KALAN YER TAMAMLANDI: Mesaj giriş alanı
   Widget _buildInputArea() {
     return Container(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 10, left: 16, right: 16, top: 10),
-      decoration: const BoxDecoration(color: Color(0xFF1E2329), borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).padding.bottom + 10,
+          left: 16, right: 16, top: 10
+      ),
+      decoration: const BoxDecoration(
+          color: Color(0xFF1E2329),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))]
+      ),
       child: Column(
         children: [
+          // BİRİNE YANIT VERİYORSAK ÇIKAN BİLGİ ETİKETİ
           if (replyingTo != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: Row(children: [
-                Text("Replying to ${replyingTo!['profiles']['username']}", style: const TextStyle(color: Color(0xFF00E054), fontSize: 11)),
+                Text("Replying to ${replyingTo!['profiles']['username']}", style: const TextStyle(color: Color(0xFF00E054), fontSize: 11, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                IconButton(onPressed: () => setState(() => replyingTo = null), icon: const Icon(Icons.close, size: 16, color: Colors.white24), padding: EdgeInsets.zero, constraints: const BoxConstraints())
+                GestureDetector(
+                  onTap: () => setState(() => replyingTo = null),
+                  child: const Icon(Icons.close, size: 16, color: Colors.white24),
+                )
               ]),
             ),
-          Row(children: [
-            Expanded(child: TextField(controller: _commentController, focusNode: _focusNode, style: const TextStyle(color: Colors.white, fontSize: 14), decoration: const InputDecoration(hintText: "Add a comment...", hintStyle: TextStyle(color: Colors.white24), border: InputBorder.none))),
-            IconButton(onPressed: _postComment, icon: const Icon(Icons.send, color: Color(0xFF00E054))),
-          ]),
+
+          // MESAJ KUTUSU VE GÖNDER BUTONU
+          Row(
+              children: [
+                Expanded(
+                    child: TextField(
+                        controller: _commentController,
+                        focusNode: _focusNode,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        decoration: const InputDecoration(
+                            hintText: "Add a comment...",
+                            hintStyle: TextStyle(color: Colors.white24),
+                            border: InputBorder.none
+                        )
+                    )
+                ),
+                IconButton(
+                    onPressed: _postComment,
+                    icon: const Icon(Icons.send, color: Color(0xFF00E054))
+                ),
+              ]
+          ),
         ],
       ),
     );

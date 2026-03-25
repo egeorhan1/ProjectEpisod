@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../api_config.dart';
 import 'show_detail_screen.dart';
+import 'other_profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -12,7 +15,10 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderStateMixin {
+  final _supabase = Supabase.instance.client;
+
+  // -- SHOWS DEĞİŞKENLERİ --
   List searchResults = [];
   bool isSearching = false;
   bool isMoreLoading = false;
@@ -20,31 +26,47 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Selected Filter Values
   String selectedGenreId = "";
   String selectedCountryCode = "";
   String selectedSortBy = "popularity.desc";
 
+  // -- PEOPLE DEĞİŞKENLERİ --
+  late TabController _tabController;
+  Timer? _debounce;
+  List userResults = [];
+  bool isSearchingUsers = false;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+
+    _tabController.addListener(() {
+      setState(() {});
+    });
+
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
-        if (!isMoreLoading && !isSearching && searchResults.isNotEmpty) {
-          loadMoreShows();
+        if (!isMoreLoading && !isSearching && searchResults.isNotEmpty && _tabController.index == 0) {
+          _loadMoreShows();
         }
       }
     });
+
+    // İlk açılışta popüler dizileri yükle
+    _applyFilters();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     _controller.dispose();
+    _tabController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  // --- TMDB DATA (English) ---
+  // --- TMDB DATA ---
   final List<Map<String, String>> sortOptions = [
     {"name": "Popularity (Descending)", "value": "popularity.desc"},
     {"name": "Rating (Highest)", "value": "vote_average.desc"},
@@ -74,25 +96,45 @@ class _SearchScreenState extends State<SearchScreen> {
   String _getCountryName(String code) => countries.firstWhere((c) => c['code'] == code, orElse: () => {'name': ''})['name']!;
   String _getSortName(String value) => sortOptions.firstWhere((s) => s['value'] == value)['name']!;
 
-  // --- API FUNCTIONS ---
-  Future<void> applyFilters() async {
+  // --- MERKEZİ ARAMA VE FİLTRELEME YÖNETİCİSİ ---
+  Future<void> _applyFilters() async {
     setState(() {
       isSearching = true;
       currentPage = 1;
       searchResults = [];
-      _controller.clear();
     });
-    await fetchShows();
+
+    final q = _controller.text.trim();
+    if (q.isEmpty) {
+      await _fetchShows(); // Kelime yoksa TMDB Discover API
+    } else {
+      await _searchShows(q); // Kelime varsa Search API + Local Filtre
+    }
   }
 
-  Future<void> loadMoreShows() async {
+  // Çarpı (X) tuşuna basıldığında filtreleri sıfırlar
+  Future<void> _clearFilters() async {
+    setState(() {
+      selectedGenreId = "";
+      selectedCountryCode = "";
+      selectedSortBy = "popularity.desc";
+    });
+    await _applyFilters();
+  }
+
+  Future<void> _loadMoreShows() async {
     setState(() => isMoreLoading = true);
     currentPage++;
-    await fetchShows(isLoadMore: true);
+    final q = _controller.text.trim();
+    if (q.isEmpty) {
+      await _fetchShows(isLoadMore: true);
+    } else {
+      await _searchShows(q, isLoadMore: true);
+    }
   }
 
-  Future<void> fetchShows({bool isLoadMore = false}) async {
-    // Language changed to en-US
+  // 1. DÜZ KEŞİF (Kelime araması yokken çalışır - TMDB filtreleri destekler)
+  Future<void> _fetchShows({bool isLoadMore = false}) async {
     String urlString = '${ApiConfig.baseUrl}/discover/tv?api_key=${ApiConfig.apiKey}&language=en-US&sort_by=$selectedSortBy&page=$currentPage';
 
     if (selectedGenreId.isNotEmpty) urlString += '&with_genres=$selectedGenreId';
@@ -103,44 +145,96 @@ class _SearchScreenState extends State<SearchScreen> {
       final response = await http.get(Uri.parse(urlString));
       if (response.statusCode == 200) {
         final List newResults = json.decode(response.body)['results'];
-        setState(() {
-          if (isLoadMore) {
-            searchResults.addAll(newResults);
-          } else {
-            searchResults = newResults;
-          }
-          isSearching = false;
-          isMoreLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            if (isLoadMore) searchResults.addAll(newResults);
+            else searchResults = newResults;
+            isSearching = false;
+            isMoreLoading = false;
+          });
+        }
       }
     } catch (e) {
-      setState(() { isSearching = false; isMoreLoading = false; });
+      if (mounted) setState(() { isSearching = false; isMoreLoading = false; });
     }
   }
 
-  Future<void> searchShows(String query) async {
-    if (query.isEmpty) return;
-    setState(() {
-      isSearching = true;
-      searchResults = [];
-      currentPage = 1;
-      selectedGenreId = "";
-      selectedCountryCode = "";
-      selectedSortBy = "popularity.desc";
-    });
-    // Language changed to en-US
+  // 2. KELİME ARAMASI (TMDB arama uç noktasını kullanır, filtreleri LOKAL uygular)
+  Future<void> _searchShows(String query, {bool isLoadMore = false}) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&language=en-US&page=$currentPage');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
-        setState(() {
-          searchResults = json.decode(response.body)['results'];
-          isSearching = false;
-        });
+        List rawResults = json.decode(response.body)['results'];
+
+        // YENİ: TMDB Search API filtre desteklemediği için lokal filtreleme yapıyoruz!
+        List filteredResults = rawResults.where((show) {
+          bool matchesGenre = true;
+          if (selectedGenreId.isNotEmpty) {
+            matchesGenre = show['genre_ids'] != null && (show['genre_ids'] as List).contains(int.parse(selectedGenreId));
+          }
+          bool matchesCountry = true;
+          if (selectedCountryCode.isNotEmpty) {
+            matchesCountry = show['origin_country'] != null && (show['origin_country'] as List).contains(selectedCountryCode);
+          }
+          return matchesGenre && matchesCountry;
+        }).toList();
+
+        // Lokal Sıralama
+        if (selectedSortBy == 'popularity.desc') {
+          filteredResults.sort((a, b) => (b['popularity'] as num? ?? 0).compareTo(a['popularity'] as num? ?? 0));
+        } else if (selectedSortBy == 'vote_average.desc') {
+          filteredResults.sort((a, b) => (b['vote_average'] as num? ?? 0).compareTo(a['vote_average'] as num? ?? 0));
+        } else if (selectedSortBy == 'first_air_date.desc') {
+          filteredResults.sort((a, b) => (b['first_air_date'] ?? '').compareTo(a['first_air_date'] ?? ''));
+        }
+
+        if (mounted) {
+          setState(() {
+            if (isLoadMore) searchResults.addAll(filteredResults);
+            else searchResults = filteredResults;
+            isSearching = false;
+            isMoreLoading = false;
+          });
+        }
       }
     } catch (e) {
-      setState(() => isSearching = false);
+      if (mounted) setState(() => isSearching = false);
     }
+  }
+
+  // --- API FUNCTIONS (USERS) ---
+  Future<void> searchUsers(String query) async {
+    setState(() => isSearchingUsers = true);
+    try {
+      final res = await _supabase.from('profiles').select().ilike('username', '%$query%').limit(20);
+      if (mounted) setState(() => userResults = res);
+    } catch (e) {
+      debugPrint("User search error: $e");
+    } finally {
+      if (mounted) setState(() => isSearchingUsers = false);
+    }
+  }
+
+  // --- REAL-TIME SEARCH (DEBOUNCE) ---
+  void _onSearchChanged(String val) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      final q = val.trim();
+      setState(() {
+        isSearching = true;
+        currentPage = 1;
+        searchResults = [];
+        if (q.isEmpty) userResults.clear();
+      });
+
+      if (q.isEmpty) {
+        _fetchShows();
+      } else {
+        _searchShows(q);
+        searchUsers(q);
+      }
+    });
   }
 
   // --- UI HELPERS ---
@@ -167,7 +261,10 @@ class _SearchScreenState extends State<SearchScreen> {
                 const SizedBox(height: 30),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  onPressed: () { Navigator.pop(context); applyFilters(); },
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _applyFilters(); // YENİ: Filtreler uygulandığında güncel listeyi çağır
+                  },
                   child: const Text("SHOW RESULTS", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 20),
@@ -209,67 +306,115 @@ class _SearchScreenState extends State<SearchScreen> {
         title: TextField(
           controller: _controller,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: "Search shows...", hintStyle: TextStyle(color: Colors.grey), border: InputBorder.none),
-          onSubmitted: searchShows,
+          decoration: const InputDecoration(hintText: "Search shows or people...", hintStyle: TextStyle(color: Colors.grey), border: InputBorder.none),
+          onChanged: _onSearchChanged,
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.tune, color: hasActiveFilter ? const Color(0xFF00E054) : Colors.white),
-            onPressed: _openFilterMenu,
-          )
+          if (_tabController.index == 0)
+            IconButton(
+              icon: Icon(Icons.tune, color: hasActiveFilter ? const Color(0xFF00E054) : Colors.white),
+              onPressed: _openFilterMenu,
+            )
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFF00E054),
+          labelColor: const Color(0xFF00E054),
+          unselectedLabelColor: Colors.white54,
+          dividerColor: Colors.transparent,
+          tabs: const [
+            Tab(text: "Shows"),
+            Tab(text: "People"),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildShowsTab(hasActiveFilter),
+          _buildUsersTab(),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- ACTIVE FILTER CHIPS ---
-          if (hasActiveFilter && !isSearching)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Text("Filters: ", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    if (selectedSortBy != "popularity.desc") _buildFilterChip(_getSortName(selectedSortBy), isSort: true),
-                    if (selectedGenreId.isNotEmpty) _buildFilterChip(_getGenreName(selectedGenreId)),
-                    if (selectedCountryCode.isNotEmpty) _buildFilterChip(_getCountryName(selectedCountryCode)),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          selectedGenreId = "";
-                          selectedCountryCode = "";
-                          selectedSortBy = "popularity.desc";
-                          searchResults = [];
-                        });
-                      },
-                      child: const Icon(Icons.cancel, size: 20, color: Colors.redAccent),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+    );
+  }
 
-          // --- RESULTS ---
-          Expanded(
-            child: isSearching
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))
-                : searchResults.isEmpty
-                ? const Center(child: Text("Search or filter to discover", style: TextStyle(color: Colors.grey)))
-                : GridView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3, childAspectRatio: 0.67, crossAxisSpacing: 10, mainAxisSpacing: 10,
+  // --- SHOWS SEKME İÇERİĞİ ---
+  Widget _buildShowsTab(bool hasActiveFilter) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // YENİ: Arama yapılıyorken de filtre çipleri görünsün diye text.isEmpty şartı kaldırıldı
+        if (hasActiveFilter)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const Text("Filters: ", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  if (selectedSortBy != "popularity.desc") _buildFilterChip(_getSortName(selectedSortBy), isSort: true),
+                  if (selectedGenreId.isNotEmpty) _buildFilterChip(_getGenreName(selectedGenreId)),
+                  if (selectedCountryCode.isNotEmpty) _buildFilterChip(_getCountryName(selectedCountryCode)),
+                  GestureDetector(
+                    onTap: _clearFilters, // YENİ: Çarpıya basınca gerçekten sıfırla
+                    child: const Icon(Icons.cancel, size: 20, color: Colors.redAccent),
+                  ),
+                ],
               ),
-              itemCount: searchResults.length,
-              itemBuilder: (context, index) => _buildPosterTile(searchResults[index]),
             ),
           ),
-          if (isMoreLoading)
-            const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))),
-        ],
-      ),
+
+        Expanded(
+          child: isSearching
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))
+              : searchResults.isEmpty
+              ? const Center(child: Text("No shows found.", style: TextStyle(color: Colors.grey)))
+              : GridView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3, childAspectRatio: 0.67, crossAxisSpacing: 10, mainAxisSpacing: 10,
+            ),
+            itemCount: searchResults.length,
+            itemBuilder: (context, index) => _buildPosterTile(searchResults[index]),
+          ),
+        ),
+        if (isMoreLoading)
+          const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))),
+      ],
+    );
+  }
+
+  // --- PEOPLE SEKME İÇERİĞİ ---
+  Widget _buildUsersTab() {
+    if (_controller.text.trim().isEmpty) {
+      return const Center(child: Text("Type a username to find people", style: TextStyle(color: Colors.white24)));
+    }
+    if (isSearchingUsers) return const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)));
+    if (userResults.isEmpty) return const Center(child: Text("No users found.", style: TextStyle(color: Colors.white24)));
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: userResults.length,
+      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
+      itemBuilder: (context, index) {
+        final user = userResults[index];
+        final String uName = user['username'] ?? "User";
+
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          leading: CircleAvatar(
+            radius: 22,
+            backgroundColor: const Color(0xFF2C3440),
+            child: Text(uName[0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold, fontSize: 18)),
+          ),
+          title: Text(uName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 14),
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (c) => OtherUserProfileScreen(userId: user['id'])));
+          },
+        );
+      },
     );
   }
 

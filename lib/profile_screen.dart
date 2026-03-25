@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_list_screen.dart';
-import 'show_detail_screen.dart';
+import 'follow_list_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,6 +16,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int watchedCount = 0;
   int likedCount = 0;
   int totalEpisodesCount = 0;
+
+  int followersCount = 0;
+  int followingCount = 0;
+
   bool isLoading = true;
 
   @override
@@ -29,10 +33,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user == null) return;
     try {
       final results = await Future.wait<dynamic>([
+        // 1. Profil bilgilerini çek
         _supabase.from('profiles').select().eq('id', user.id).single(),
-        _supabase.from('watched_shows').select('*').count(CountOption.exact),
-        _supabase.from('liked_shows').select('*').count(CountOption.exact),
-        _supabase.from('watched_episodes').select('*').count(CountOption.exact),
+
+        // 2. Sadece bu kullanıcının izlediği dizileri say
+        _supabase.from('watched_shows').select('*').eq('user_id', user.id).count(CountOption.exact),
+
+        // 3. Sadece bu kullanıcının beğendiği dizileri say
+        _supabase.from('liked_shows').select('*').eq('user_id', user.id).count(CountOption.exact),
+
+        // 4. Sadece bu kullanıcının izlediği bölümleri say
+        _supabase.from('watched_episodes').select('*').eq('user_id', user.id).count(CountOption.exact),
+
+        // 5. Takipçi ve Takip Edilen sayıları (Zaten ID ile filtrelenmişti)
+        _supabase.from('follows').select('*').eq('following_id', user.id).count(CountOption.exact),
+        _supabase.from('follows').select('*').eq('follower_id', user.id).count(CountOption.exact),
       ]);
 
       if (mounted) {
@@ -41,10 +56,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           watchedCount = (results[1] as PostgrestResponse).count ?? 0;
           likedCount = (results[2] as PostgrestResponse).count ?? 0;
           totalEpisodesCount = (results[3] as PostgrestResponse).count ?? 0;
+          followersCount = (results[4] as PostgrestResponse).count ?? 0;
+          followingCount = (results[5] as PostgrestResponse).count ?? 0;
           isLoading = false;
         });
       }
     } catch (e) {
+      debugPrint("Profile load error: $e");
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -54,10 +72,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (isLoading) return const Scaffold(backgroundColor: Color(0xFF14181C), body: Center(child: CircularProgressIndicator(color: Color(0xFF00E054))));
 
     final username = profileData?['username'] ?? "User";
+    final userId = _supabase.auth.currentUser!.id;
 
     return Scaffold(
       backgroundColor: const Color(0xFF14181C),
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, actions: [IconButton(icon: const Icon(Icons.logout, color: Colors.redAccent), onPressed: () => _supabase.auth.signOut())]),
+      appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          actions: [
+            IconButton(
+                icon: const Icon(Icons.logout, color: Colors.redAccent),
+                onPressed: () => _supabase.auth.signOut()
+            )
+          ]
+      ),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: const Color(0xFF00E054),
@@ -66,9 +94,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             children: [
               const SizedBox(height: 10),
-              Center(child: CircleAvatar(radius: 45, backgroundColor: const Color(0xFF2C3440), child: Text(username[0].toUpperCase(), style: const TextStyle(fontSize: 35, color: Color(0xFF00E054), fontWeight: FontWeight.bold)))),
+              Center(
+                  child: CircleAvatar(
+                      radius: 45,
+                      backgroundColor: const Color(0xFF2C3440),
+                      child: Text(username[0].toUpperCase(), style: const TextStyle(fontSize: 35, color: Color(0xFF00E054), fontWeight: FontWeight.bold))
+                  )
+              ),
               const SizedBox(height: 16),
               Text(username, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GestureDetector(
+                    onTap: () => _openFollowList(userId, "Followers", true),
+                    child: Text("$followersCount Followers", style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Text("•", style: TextStyle(color: Colors.white24, fontSize: 13)),
+                  ),
+                  GestureDetector(
+                    onTap: () => _openFollowList(userId, "Following", false),
+                    child: Text("$followingCount Following", style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+
               const SizedBox(height: 30),
               Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
                 _buildStat("SHOWS", watchedCount.toString()),
@@ -88,6 +142,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _openUserList(String t, String n) {
     Navigator.push(context, MaterialPageRoute(builder: (c) => UserListScreen(tableName: t, title: n))).then((_) => _loadData());
+  }
+
+  void _openFollowList(String uid, String title, bool isFollowers) {
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (c) => FollowListScreen(userId: uid, title: title, isFollowers: isFollowers)
+        )
+    ).then((_) => _loadData());
   }
 
   Widget _buildStat(String l, String v) => Column(children: [Text(v, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)), const SizedBox(height: 4), Text(l, style: const TextStyle(fontSize: 10, color: Colors.grey, letterSpacing: 1.2))]);
