@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; // Fragman açmak için
 import 'api_config.dart';
 import 'show_credits_screen.dart';
 import 'episode_detail_screen.dart';
@@ -40,6 +41,9 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   List<int> ratingDistribution = List.filled(10, 0);
   int totalRatingsCount = 0;
 
+  // Fragman değişkeni
+  String? trailerKey;
+
   Color activeColor = const Color(0xFF14181C);
 
   @override
@@ -48,6 +52,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     _loadAllPageData();
   }
 
+  // --- TÜM SAYFAYI YENİLEYEN ANA SİSTEM ---
   Future<void> _loadAllPageData() async {
     await Future.wait([
       _checkStatus(),
@@ -55,8 +60,43 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       fetchFullDetails(),
       fetchSeriesCast(),
       _generatePalette(),
+      fetchTrailer(), // Fragman verisini çek
     ]);
     if (mounted) setState(() => isInitialLoading = false);
+  }
+
+  // --- FRAGMAN VERİSİNİ TMDB'DEN ÇEKER ---
+  Future<void> fetchTrailer() async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/tv/${widget.show['id']}/videos?api_key=${ApiConfig.apiKey}');
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List videos = data['results'];
+        // Öncelikle "Trailer" olanı ve YouTube'da olanı bul
+        final trailer = videos.firstWhere(
+              (v) => v['type'] == 'Trailer' && v['site'] == 'YouTube',
+          orElse: () => videos.firstWhere((v) => v['site'] == 'YouTube', orElse: () => null),
+        );
+        if (mounted && trailer != null) {
+          setState(() => trailerKey = trailer['key']);
+        }
+      }
+    } catch (e) {
+      debugPrint("Trailer error: $e");
+    }
+  }
+
+  // --- FRAGMANI DIŞ UYGULAMADA AÇAR ---
+  Future<void> _launchTrailer() async {
+    if (trailerKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Trailer not available for this show.")));
+      return;
+    }
+    final url = Uri.parse("https://www.youtube.com/watch?v=$trailerKey");
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _fetchShowEpoint() async {
@@ -249,18 +289,13 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                       };
 
                       try {
-                        // GARANTİ UPDATE/INSERT MANTIĞI
-                        if (myReviewId != null) {
-                          await _supabase.from('comments').update(data).eq('id', myReviewId!);
-                        } else {
-                          await _supabase.from('comments').insert(data);
-                        }
-
+                        // UPSERT İLE GARANTİ UPDATE/INSERT
+                        await _supabase.from('comments').upsert(data);
                         await _loadAllPageData();
 
                         if (context.mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review saved!"), backgroundColor: Color(0xFF00E054)));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Success!"), backgroundColor: Color(0xFF00E054)));
                         }
                       } catch (e) { debugPrint("Save Error: $e"); }
                     }
@@ -294,8 +329,8 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
               slivers: [
                 SliverAppBar(
                   expandedHeight: 280, pinned: true, elevation: 0, backgroundColor: const Color(0xFF14181C),
-                  surfaceTintColor: Colors.transparent,
-                  scrolledUnderElevation: 0,
+                  surfaceTintColor: Colors.transparent, // Yeşil renk fix
+                  scrolledUnderElevation: 0, // Yeşil renk fix
                   leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(fit: StackFit.expand, children: [
@@ -345,10 +380,13 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
         const SizedBox(height: 12),
         Row(children: [
           _actionBtn(isLiked ? Icons.favorite : Icons.favorite_border, isLiked ? Colors.red : Colors.white54, _toggleLike),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           _actionBtn(isWatched ? Icons.check_circle : Icons.visibility_outlined, isWatched ? const Color(0xFF00E054) : Colors.white54, _toggleWatched),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           _actionBtn(Icons.star_rate_rounded, myRating > 0 ? const Color(0xFF00E054) : Colors.amber, () => _openReviewModal(context, widget.show['id'], widget.show['name'])),
+          const SizedBox(width: 12),
+          // YENİ FRAGMAN BUTONU
+          _actionBtn(Icons.play_circle_fill, Colors.white, _launchTrailer),
         ])
       ]))
     ]);
