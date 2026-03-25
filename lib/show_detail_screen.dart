@@ -48,7 +48,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     _loadAllPageData();
   }
 
-  // --- TÜM SAYFAYI YENİLEYEN ANA SİSTEM ---
   Future<void> _loadAllPageData() async {
     await Future.wait([
       _checkStatus(),
@@ -60,7 +59,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     if (mounted) setState(() => isInitialLoading = false);
   }
 
-  // --- GRAFİK VERİLERİNİ ÇEKER ---
   Future<void> _fetchShowEpoint() async {
     try {
       final res = await _supabase
@@ -82,6 +80,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
           if (index >= 0 && index < 10) dist[index]++;
         }
       }
+
       if (mounted) {
         setState(() {
           showEpoint = res.isNotEmpty ? (total / res.length) : 0.0;
@@ -92,7 +91,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     } catch (e) { debugPrint("Epoint error: $e"); }
   }
 
-  // --- KULLANICI DURUMUNU ÇEKER ---
   Future<void> _checkStatus() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -249,14 +247,22 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                         'season_number': null,
                         'episode_number': null,
                       };
+
                       try {
-                        await _supabase.from('comments').upsert(data);
-                        await _loadAllPageData(); // ANLIK GÜNCELLEME KİLİDİ
+                        // GARANTİ UPDATE/INSERT MANTIĞI
+                        if (myReviewId != null) {
+                          await _supabase.from('comments').update(data).eq('id', myReviewId!);
+                        } else {
+                          await _supabase.from('comments').insert(data);
+                        }
+
+                        await _loadAllPageData();
+
                         if (context.mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review updated!"), backgroundColor: Color(0xFF00E054)));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review saved!"), backgroundColor: Color(0xFF00E054)));
                         }
-                      } catch (e) { debugPrint("Upsert Error: $e"); }
+                      } catch (e) { debugPrint("Save Error: $e"); }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -287,14 +293,9 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
-                  expandedHeight: 280,
-                  pinned: true,
-                  elevation: 0,
-                  backgroundColor: const Color(0xFF14181C),
-                  // --- YEŞİL OLMA SORUNUNU ÇÖZEN SATIRLAR ---
+                  expandedHeight: 280, pinned: true, elevation: 0, backgroundColor: const Color(0xFF14181C),
                   surfaceTintColor: Colors.transparent,
                   scrolledUnderElevation: 0,
-                  // -----------------------------------------
                   leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(fit: StackFit.expand, children: [
