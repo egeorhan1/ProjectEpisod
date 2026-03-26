@@ -289,15 +289,32 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                       };
 
                       try {
-                        // UPSERT İLE GARANTİ UPDATE/INSERT
-                        await _supabase.from('comments').upsert(data);
+                        // FIX: Explicitly check if we are updating an existing review or creating a new one
+                        if (myReviewId != null) {
+                          // Update existing review using its ID
+                          await _supabase
+                              .from('comments')
+                              .update(data)
+                              .eq('id', myReviewId!);
+                        } else {
+                          // Insert new review
+                          await _supabase
+                              .from('comments')
+                              .insert(data);
+                        }
+
                         await _loadAllPageData();
 
                         if (context.mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Success!"), backgroundColor: Color(0xFF00E054)));
                         }
-                      } catch (e) { debugPrint("Save Error: $e"); }
+                      } catch (e) {
+                        debugPrint("Save Error: $e");
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+                        }
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
