@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api_config.dart';
+import 'api_config.dart';
 import 'show_detail_screen.dart';
 import 'other_profile_screen.dart';
 import 'person_detail_screen.dart';
@@ -43,13 +43,17 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+
+    // --- KAYDIRMA (SCROLL) DÜZELTMESİ ---
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
+      // Sayfanın bitmesine 400 piksel kala yeni sayfayı yüklemeye başla (Pürüzsüzlük için)
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 400) {
         if (!isMoreLoading && !isSearching && searchResults.isNotEmpty && _tabController.index == 0) {
           _loadMoreShows();
         }
       }
     });
+
     _applyFilters();
   }
 
@@ -79,9 +83,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     try {
       final tvUrl = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&page=$currentPage');
       final personUrl = Uri.parse('${ApiConfig.baseUrl}/search/person?api_key=${ApiConfig.apiKey}&query=$query');
-      final userQuery = _supabase.from('profiles').select().ilike('username', '%$query%').limit(10);
+      final userQuery = _supabase.from('profiles').select().ilike('username', '%$query%').limit(15);
 
-      // HATAYI DÜZELTEN KISIM: <dynamic> eklendi
       final responses = await Future.wait<dynamic>([
         http.get(tvUrl),
         http.get(personUrl),
@@ -110,16 +113,55 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       final res = await http.get(Uri.parse(url));
       if (res.statusCode == 200) {
         final List results = json.decode(res.body)['results'];
-        if (mounted) setState(() { searchResults = results; isSearching = false; });
+        if (mounted) {
+          setState(() {
+            // YENİ SAYFA EKLENİRKEN ESKİLERİ SİLME, ALTINA EKLE (addAll)
+            if (currentPage == 1) {
+              searchResults = results;
+            } else {
+              searchResults.addAll(results);
+            }
+            isSearching = false;
+          });
+        }
       }
     } catch (e) { if (mounted) setState(() => isSearching = false); }
   }
 
+  // --- SAYFA ATLAMA (PAGINATION) MANTIĞI ---
   Future<void> _loadMoreShows() async {
-    setState(() => isMoreLoading = true);
-    currentPage++;
-    await _fetchDiscoverShows();
-    setState(() => isMoreLoading = false);
+    if (isMoreLoading) return;
+    setState(() => isMoreLoading = true); // Yükleniyor durumunu aç
+    currentPage++; // Sayfayı artır
+
+    final q = _controller.text.trim();
+    if (q.isEmpty) {
+      await _fetchDiscoverShows(); // Popülerlerde kaydırıyorsa
+    } else {
+      await _fetchMoreTvShows(q);  // Bir şey aratıp kaydırıyorsa
+    }
+
+    if (mounted) {
+      setState(() => isMoreLoading = false); // Yükleniyor durumunu kapat
+    }
+  }
+
+  // Sadece TV Şovlarının sonraki sayfalarını çeker (Arama yaparken aşağı kaydırma için)
+  Future<void> _fetchMoreTvShows(String query) async {
+    try {
+      final tvUrl = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&page=$currentPage');
+      final res = await http.get(tvUrl);
+      if (res.statusCode == 200) {
+        final List results = json.decode(res.body)['results'];
+        if (mounted) {
+          setState(() {
+            searchResults.addAll(results); // Altına ekle
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Pagination search error: $e");
+    }
   }
 
   void _onSearchChanged(String val) {
@@ -127,7 +169,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     _debounce = Timer(const Duration(milliseconds: 500), () => _applyFilters());
   }
 
-  // --- UI ---
+  // --- UI KISMI ---
 
   @override
   Widget build(BuildContext context) {
@@ -166,13 +208,40 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   }
 
   Widget _buildShowsTab() {
-    if (isSearching) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-    return GridView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.67, crossAxisSpacing: 10, mainAxisSpacing: 10),
-      itemCount: searchResults.length,
-      itemBuilder: (context, i) => _buildPosterTile(searchResults[i]),
+    if (isSearching && currentPage == 1) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+
+    return Stack(
+      children: [
+        GridView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.only(left: 12, right: 12, top: 12, bottom: 80), // Alttan boşluk bıraktık ki yükleniyor ikonu filmleri kapatmasın
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.67, crossAxisSpacing: 10, mainAxisSpacing: 10),
+          itemCount: searchResults.length,
+          itemBuilder: (context, i) => _buildPosterTile(searchResults[i]),
+        ),
+
+        // --- ZARİF YÜKLENİYOR ANİMASYONU ---
+        if (isMoreLoading)
+          Positioned(
+            bottom: 20,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
+                ),
+                child: const SizedBox(
+                  width: 24, height: 24,
+                  child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 3),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

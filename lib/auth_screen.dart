@@ -109,18 +109,18 @@ class _AuthScreenState extends State<AuthScreen> {
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const Icon(Icons.tv, size: 80, color: AppColors.accent),
-              const SizedBox(height: 10),
-              const Text(
-                "EPISOD",
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
+              // --- YENİ LOGO KISMI BURASI ---
+              ClipRRect(
+                borderRadius: BorderRadius.circular(28), // Premium oval köşeler
+                child: Image.asset(
+                  'assets/logo.png', // Fotoğrafının uzantısı .jpg ise burayı logo.jpg yapmayı unutma
+                  width: 150, // Logonun büyüklüğü (isteğine göre büyütebilirsin)
+                  height: 150,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(height: 40),
+              // ------------------------------
 
               if (_isSignUp) ...[
                 _buildTextField(
@@ -149,22 +149,22 @@ class _AuthScreenState extends State<AuthScreen> {
               _isLoading
                   ? const CircularProgressIndicator(color: AppColors.accent)
                   : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        minimumSize: const Size(double.infinity, 55),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: _handleAuth,
-                      child: Text(
-                        _isSignUp ? "CREATE ACCOUNT" : "SIGN IN",
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _handleAuth,
+                child: Text(
+                  _isSignUp ? "CREATE ACCOUNT" : "SIGN IN",
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
 
               TextButton(
                 onPressed: () => setState(() => _isSignUp = !_isSignUp),
@@ -183,11 +183,11 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildTextField(
-    TextEditingController controller,
-    String hint,
-    IconData icon,
-    bool isPassword,
-  ) {
+      TextEditingController controller,
+      String hint,
+      IconData icon,
+      bool isPassword,
+      ) {
     return TextField(
       controller: controller,
       obscureText: isPassword,
