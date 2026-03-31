@@ -6,6 +6,8 @@ import 'search_screen.dart';
 import 'activity_screen.dart';
 import 'profile_screen.dart';
 import 'auth_screen.dart'; // Yeni oluşturacağımız ekran
+import 'theme/app_colors.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   // 1. Flutter bağlamını hazırla
@@ -28,18 +30,7 @@ class EpisodApp extends StatelessWidget {
     return MaterialApp(
       title: 'Episod',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF14181C),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
-        // Genel yeşil tonlarını tema bazında ayarla
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00E054),
-          secondary: Color(0xFF00E054),
-        ),
-      ),
+      theme: AppTheme.dark(),
       // 3. Oturum kontrolü yapan ana giriş noktası
       home: const AuthGate(),
     );
@@ -93,14 +84,11 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF14181C),
-        selectedItemColor: const Color(0xFF00E054),
-        unselectedItemColor: Colors.grey,
+        backgroundColor: AppColors.surface,
+        selectedItemColor: AppColors.accentSecondary,
+        unselectedItemColor: AppColors.textSecondary,
         showSelectedLabels: false,
         showUnselectedLabels: false,
         currentIndex: _selectedIndex,
@@ -109,7 +97,10 @@ class _MainScreenState extends State<MainScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(icon: Icon(Icons.flash_on), label: 'Activity'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.flash_on),
+            label: 'Activity',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),

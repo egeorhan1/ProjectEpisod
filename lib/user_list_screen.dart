@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'show_detail_screen.dart';
+import 'theme/app_colors.dart';
 
 class UserListScreen extends StatefulWidget {
   final String tableName;
@@ -12,7 +13,7 @@ class UserListScreen extends StatefulWidget {
     super.key,
     required this.tableName,
     required this.title,
-    this.userId
+    this.userId,
   });
 
   @override
@@ -57,61 +58,82 @@ class _UserListScreenState extends State<UserListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF14181C),
+        backgroundColor: AppColors.background,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-            onPressed: () => Navigator.pop(context)
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
+        ),
         centerTitle: true,
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            )
           : shows.isEmpty
-          ? const Center(child: Text("No shows found", style: TextStyle(color: Colors.white24)))
-          : GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.67,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-        ),
-        itemCount: shows.length,
-        itemBuilder: (context, index) {
-          final show = shows[index];
-          return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ShowDetailScreen(show: {
-                    'id': show['show_id'],
-                    'name': show['show_name'],
-                    'poster_path': show['poster_path'],
-                  }),
-                ),
-              ).then((_) => _fetchList());
-            },
-            child: Hero(
-              tag: 'list_poster_${show['show_id']}',
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: "https://image.tmdb.org/t/p/w342${show['poster_path']}",
-                  fit: BoxFit.cover,
-                  placeholder: (c, u) => Container(color: Colors.white10),
-                  errorWidget: (c, u, e) => Container(color: Colors.white10, child: const Icon(Icons.error)),
-                ),
+          ? const Center(
+              child: Text(
+                "No shows found",
+                style: TextStyle(color: AppColors.textMuted),
               ),
+            )
+          : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 0.67,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: shows.length,
+              itemBuilder: (context, index) {
+                final show = shows[index];
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ShowDetailScreen(
+                          show: {
+                            'id': show['show_id'],
+                            'name': show['show_name'],
+                            'poster_path': show['poster_path'],
+                          },
+                        ),
+                      ),
+                    ).then((_) => _fetchList());
+                  },
+                  child: Hero(
+                    tag: 'list_poster_${show['show_id']}',
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl:
+                            "https://image.tmdb.org/t/p/w342${show['poster_path']}",
+                        fit: BoxFit.cover,
+                        placeholder: (c, u) =>
+                            Container(color: AppColors.divider),
+                        errorWidget: (c, u, e) => Container(
+                          color: AppColors.divider,
+                          child: const Icon(Icons.error),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }

@@ -6,5 +6,6 @@ class ApiConfig {
 
   // Supabase Bilgileri
   static const String supabaseUrl = 'https://fivkdpxzqtimlspkbxul.supabase.co';
-  static const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdmtkcHh6cXRpbWxzcGtieHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzY4NzgsImV4cCI6MjA4Nzk1Mjg3OH0.ewFWm2TLWfo5mRT5NwJpoRmQ5me0AjwGWo7R-_uW0hI';
+  static const String supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpdmtkcHh6cXRpbWxzcGtieHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzY4NzgsImV4cCI6MjA4Nzk1Mjg3OH0.ewFWm2TLWfo5mRT5NwJpoRmQ5me0AjwGWo7R-_uW0hI';
 }

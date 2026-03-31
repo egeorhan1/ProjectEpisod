@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'api_config.dart';
 import 'other_profile_screen.dart';
+import 'theme/app_colors.dart';
+import 'widgets/episod_user_avatar.dart';
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key});
@@ -35,8 +37,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
       List unifiedList = [];
 
       // 1. Kimi takip ettiğimi bul ve hafızaya al
-      final followingRes = await _supabase.from('follows').select('following_id').eq('follower_id', myId);
-      myFollowingIds = (followingRes as List).map((f) => f['following_id'].toString()).toList();
+      final followingRes = await _supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', myId);
+      myFollowingIds = (followingRes as List)
+          .map((f) => f['following_id'].toString())
+          .toList();
 
       // 2. BANA GELEN BİLDİRİMLERİ (TAKİP VS.) ÇEK
       final activitiesRes = await _supabase
@@ -67,7 +74,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
             .limit(20);
 
         for (var item in (reviews as List)) {
-          final tmdbRes = await http.get(Uri.parse('${ApiConfig.baseUrl}/tv/${item['show_id']}?api_key=${ApiConfig.apiKey}&language=en-US'));
+          final tmdbRes = await http.get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/tv/${item['show_id']}?api_key=${ApiConfig.apiKey}&language=en-US',
+            ),
+          );
           String? poster;
           String showName = "Show";
 
@@ -94,10 +105,20 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
       for (var item in unifiedList) {
         final Duration diff = DateTime.now().difference(item['raw_time']);
-        item['time_ago'] = diff.inDays > 0 ? "${diff.inDays}d ago" : diff.inHours > 0 ? "${diff.inHours}h ago" : diff.inMinutes > 0 ? "${diff.inMinutes}m ago" : "Just now";
+        item['time_ago'] = diff.inDays > 0
+            ? "${diff.inDays}d ago"
+            : diff.inHours > 0
+            ? "${diff.inHours}h ago"
+            : diff.inMinutes > 0
+            ? "${diff.inMinutes}m ago"
+            : "Just now";
       }
 
-      if (mounted) setState(() { feedItems = unifiedList; isLoading = false; });
+      if (mounted)
+        setState(() {
+          feedItems = unifiedList;
+          isLoading = false;
+        });
     } catch (e) {
       debugPrint("Feed error: $e");
       if (mounted) setState(() => isLoading = false);
@@ -113,13 +134,13 @@ class _ActivityScreenState extends State<ActivityScreen> {
       // Takip et
       await _supabase.from('follows').insert({
         'follower_id': myId,
-        'following_id': targetUserId
+        'following_id': targetUserId,
       });
       // Bildirim yolla
       await _supabase.from('activities').insert({
         'user_id': targetUserId,
         'actor_id': myId,
-        'action_type': 'follow'
+        'action_type': 'follow',
       });
 
       // Anında UI güncelle (Tiki çıkart)
@@ -128,7 +149,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Followed back!"), duration: Duration(seconds: 2)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Followed back!"),
+            duration: Duration(seconds: 2),
+          ),
+        );
       }
     } catch (e) {
       debugPrint("Follow back error: $e");
@@ -138,39 +164,51 @@ class _ActivityScreenState extends State<ActivityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text("Recent Activity", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.2)),
-        backgroundColor: const Color(0xFF14181C),
+        title: const Text(
+          "Recent Activity",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            letterSpacing: 1.2,
+          ),
+        ),
+        backgroundColor: AppColors.background,
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            )
           : feedItems.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
-        onRefresh: _fetchMixedFeed,
-        color: const Color(0xFF00E054),
-        backgroundColor: const Color(0xFF1E2329),
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          itemCount: feedItems.length,
-          separatorBuilder: (c, i) => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Divider(color: Colors.white10, height: 1),
-          ),
-          itemBuilder: (context, index) {
-            final item = feedItems[index];
-            if (item['type'] == 'notification') {
-              return _buildNotificationItem(item);
-            } else {
-              return _buildReviewItem(item);
-            }
-          },
-        ),
-      ),
+              onRefresh: _fetchMixedFeed,
+              color: AppColors.accent,
+              backgroundColor: AppColors.surface,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                itemCount: feedItems.length,
+                separatorBuilder: (c, i) => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Divider(color: AppColors.divider, height: 1),
+                ),
+                itemBuilder: (context, index) {
+                  final item = feedItems[index];
+                  if (item['type'] == 'notification') {
+                    return _buildNotificationItem(item);
+                  } else {
+                    return _buildReviewItem(item);
+                  }
+                },
+              ),
+            ),
     );
   }
 
@@ -179,11 +217,29 @@ class _ActivityScreenState extends State<ActivityScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.notifications_none, size: 60, color: Colors.white24),
+          const Icon(
+            Icons.notifications_none,
+            size: 60,
+            color: AppColors.textMuted,
+          ),
           const SizedBox(height: 16),
-          const Text("No recent activity", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            "No recent activity",
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text("Follow people to see their reviews,\nor wait for someone to follow you.", textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14)),
+          Text(
+            "Follow people to see their reviews,\nor wait for someone to follow you.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary.withValues(alpha: 0.5),
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -200,11 +256,16 @@ class _ActivityScreenState extends State<ActivityScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => OtherUserProfileScreen(userId: targetUserId))),
-            child: CircleAvatar(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => OtherUserProfileScreen(userId: targetUserId),
+              ),
+            ),
+            child: EpisodUserAvatar(
+              username: item['user'],
               radius: 20,
-              backgroundColor: const Color(0xFF2C3440),
-              child: Text(item['user'][0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold, fontSize: 16)),
+              fontSize: 16,
             ),
           ),
           const SizedBox(width: 14),
@@ -214,26 +275,52 @@ class _ActivityScreenState extends State<ActivityScreen> {
               children: [
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
                     children: [
-                      TextSpan(text: "${item['user']} ", style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const TextSpan(text: "started following you.", style: TextStyle(color: Colors.white70)),
+                      TextSpan(
+                        text: "${item['user']} ",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const TextSpan(
+                        text: "started following you.",
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(item['time_ago'], style: const TextStyle(color: Colors.white30, fontSize: 12)),
+                Text(
+                  item['time_ago'],
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
 
           // YENİ: AKILLI BUTON
           if (isFollowingBack)
-            const Icon(Icons.check_circle, color: Colors.white24, size: 22) // Zaten takip ediyorsan sönük tik çıkar
+            const Icon(
+              Icons.check_circle,
+              color: AppColors.textMuted,
+              size: 22,
+            ) // Zaten takip ediyorsan sönük tik çıkar
           else
             IconButton(
-              icon: const Icon(Icons.person_add_alt_1, color: Color(0xFF00E054), size: 24),
-              onPressed: () => _followUserBack(targetUserId), // Tıklayınca anında geri takip et!
+              icon: const Icon(
+                Icons.person_add_alt_1,
+                color: AppColors.accent,
+                size: 24,
+              ),
+              onPressed: () => _followUserBack(
+                targetUserId,
+              ), // Tıklayınca anında geri takip et!
             ),
         ],
       ),
@@ -248,11 +335,16 @@ class _ActivityScreenState extends State<ActivityScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => OtherUserProfileScreen(userId: item['user_id']))),
-            child: CircleAvatar(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => OtherUserProfileScreen(userId: item['user_id']),
+              ),
+            ),
+            child: EpisodUserAvatar(
+              username: item['user'],
               radius: 20,
-              backgroundColor: const Color(0xFF2C3440),
-              child: Text(item['user'][0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold, fontSize: 16)),
+              fontSize: 16,
             ),
           ),
           const SizedBox(width: 14),
@@ -263,28 +355,72 @@ class _ActivityScreenState extends State<ActivityScreen> {
                 Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text("${item['user']} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
-                    const Text("reviewed ", style: TextStyle(color: Colors.white54, fontSize: 14)),
-                    Text("${item['show_name']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                    Text(
+                      "${item['user']} ",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Text(
+                      "reviewed ",
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      "${item['show_name']}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(item['time_ago'], style: const TextStyle(color: Colors.white30, fontSize: 12)),
+                Text(
+                  item['time_ago'],
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E2329),
-                    borderRadius: const BorderRadius.only(topRight: Radius.circular(16), bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    color: AppColors.surface,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    border: Border.all(
+                      color: AppColors.textPrimary.withValues(alpha: 0.05),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.format_quote_rounded, color: Color(0xFF00E054), size: 18),
+                      const Icon(
+                        Icons.format_quote_rounded,
+                        color: AppColors.accent,
+                        size: 18,
+                      ),
                       const SizedBox(height: 4),
-                      Text(item['content'], style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w400)),
+                      Text(
+                        item['content'],
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          height: 1.5,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -293,17 +429,37 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
           const SizedBox(width: 16),
           Container(
-            decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.overlayDark.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: CachedNetworkImage(
                 imageUrl: "https://image.tmdb.org/t/p/w154${item['poster']}",
-                width: 60, height: 90, fit: BoxFit.cover,
-                placeholder: (c, u) => Container(width: 60, height: 90, color: const Color(0xFF1E2329)),
-                errorWidget: (c, u, e) => Container(width: 60, height: 90, color: const Color(0xFF1E2329), child: const Icon(Icons.tv, size: 20, color: Colors.white24)),
+                width: 60,
+                height: 90,
+                fit: BoxFit.cover,
+                placeholder: (c, u) =>
+                    Container(width: 60, height: 90, color: AppColors.surface),
+                errorWidget: (c, u, e) => Container(
+                  width: 60,
+                  height: 90,
+                  color: AppColors.surface,
+                  child: const Icon(
+                    Icons.tv,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
               ),
             ),
-          )
+          ),
         ],
       ),
     );

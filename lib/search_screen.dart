@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../api_config.dart';
 import 'show_detail_screen.dart';
 import 'other_profile_screen.dart';
+import 'theme/app_colors.dart';
+import 'widgets/episod_user_avatar.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -15,7 +17,8 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderStateMixin {
+class _SearchScreenState extends State<SearchScreen>
+    with SingleTickerProviderStateMixin {
   final _supabase = Supabase.instance.client;
 
   // -- SHOWS DEĞİŞKENLERİ --
@@ -46,8 +49,12 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     });
 
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
-        if (!isMoreLoading && !isSearching && searchResults.isNotEmpty && _tabController.index == 0) {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 300) {
+        if (!isMoreLoading &&
+            !isSearching &&
+            searchResults.isNotEmpty &&
+            _tabController.index == 0) {
           _loadMoreShows();
         }
       }
@@ -92,9 +99,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     {"name": "Japan 🇯🇵", "code": "JP"},
   ];
 
-  String _getGenreName(String id) => genres.firstWhere((g) => g['id'] == id, orElse: () => {'name': ''})['name']!;
-  String _getCountryName(String code) => countries.firstWhere((c) => c['code'] == code, orElse: () => {'name': ''})['name']!;
-  String _getSortName(String value) => sortOptions.firstWhere((s) => s['value'] == value)['name']!;
+  String _getGenreName(String id) => genres.firstWhere(
+    (g) => g['id'] == id,
+    orElse: () => {'name': ''},
+  )['name']!;
+  String _getCountryName(String code) => countries.firstWhere(
+    (c) => c['code'] == code,
+    orElse: () => {'name': ''},
+  )['name']!;
+  String _getSortName(String value) =>
+      sortOptions.firstWhere((s) => s['value'] == value)['name']!;
 
   // --- MERKEZİ ARAMA VE FİLTRELEME YÖNETİCİSİ ---
   Future<void> _applyFilters() async {
@@ -135,11 +149,15 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   // 1. DÜZ KEŞİF (Kelime araması yokken çalışır - TMDB filtreleri destekler)
   Future<void> _fetchShows({bool isLoadMore = false}) async {
-    String urlString = '${ApiConfig.baseUrl}/discover/tv?api_key=${ApiConfig.apiKey}&language=en-US&sort_by=$selectedSortBy&page=$currentPage';
+    String urlString =
+        '${ApiConfig.baseUrl}/discover/tv?api_key=${ApiConfig.apiKey}&language=en-US&sort_by=$selectedSortBy&page=$currentPage';
 
-    if (selectedGenreId.isNotEmpty) urlString += '&with_genres=$selectedGenreId';
-    if (selectedCountryCode.isNotEmpty) urlString += '&with_origin_country=$selectedCountryCode';
-    if (selectedSortBy.contains('vote_average')) urlString += '&vote_count.gte=100';
+    if (selectedGenreId.isNotEmpty)
+      urlString += '&with_genres=$selectedGenreId';
+    if (selectedCountryCode.isNotEmpty)
+      urlString += '&with_origin_country=$selectedCountryCode';
+    if (selectedSortBy.contains('vote_average'))
+      urlString += '&vote_count.gte=100';
 
     try {
       final response = await http.get(Uri.parse(urlString));
@@ -147,21 +165,29 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
         final List newResults = json.decode(response.body)['results'];
         if (mounted) {
           setState(() {
-            if (isLoadMore) searchResults.addAll(newResults);
-            else searchResults = newResults;
+            if (isLoadMore)
+              searchResults.addAll(newResults);
+            else
+              searchResults = newResults;
             isSearching = false;
             isMoreLoading = false;
           });
         }
       }
     } catch (e) {
-      if (mounted) setState(() { isSearching = false; isMoreLoading = false; });
+      if (mounted)
+        setState(() {
+          isSearching = false;
+          isMoreLoading = false;
+        });
     }
   }
 
   // 2. KELİME ARAMASI (TMDB arama uç noktasını kullanır, filtreleri LOKAL uygular)
   Future<void> _searchShows(String query, {bool isLoadMore = false}) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&language=en-US&page=$currentPage');
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&language=en-US&page=$currentPage',
+    );
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -171,28 +197,48 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
         List filteredResults = rawResults.where((show) {
           bool matchesGenre = true;
           if (selectedGenreId.isNotEmpty) {
-            matchesGenre = show['genre_ids'] != null && (show['genre_ids'] as List).contains(int.parse(selectedGenreId));
+            matchesGenre =
+                show['genre_ids'] != null &&
+                (show['genre_ids'] as List).contains(
+                  int.parse(selectedGenreId),
+                );
           }
           bool matchesCountry = true;
           if (selectedCountryCode.isNotEmpty) {
-            matchesCountry = show['origin_country'] != null && (show['origin_country'] as List).contains(selectedCountryCode);
+            matchesCountry =
+                show['origin_country'] != null &&
+                (show['origin_country'] as List).contains(selectedCountryCode);
           }
           return matchesGenre && matchesCountry;
         }).toList();
 
         // Lokal Sıralama
         if (selectedSortBy == 'popularity.desc') {
-          filteredResults.sort((a, b) => (b['popularity'] as num? ?? 0).compareTo(a['popularity'] as num? ?? 0));
+          filteredResults.sort(
+            (a, b) => (b['popularity'] as num? ?? 0).compareTo(
+              a['popularity'] as num? ?? 0,
+            ),
+          );
         } else if (selectedSortBy == 'vote_average.desc') {
-          filteredResults.sort((a, b) => (b['vote_average'] as num? ?? 0).compareTo(a['vote_average'] as num? ?? 0));
+          filteredResults.sort(
+            (a, b) => (b['vote_average'] as num? ?? 0).compareTo(
+              a['vote_average'] as num? ?? 0,
+            ),
+          );
         } else if (selectedSortBy == 'first_air_date.desc') {
-          filteredResults.sort((a, b) => (b['first_air_date'] ?? '').compareTo(a['first_air_date'] ?? ''));
+          filteredResults.sort(
+            (a, b) => (b['first_air_date'] ?? '').compareTo(
+              a['first_air_date'] ?? '',
+            ),
+          );
         }
 
         if (mounted) {
           setState(() {
-            if (isLoadMore) searchResults.addAll(filteredResults);
-            else searchResults = filteredResults;
+            if (isLoadMore)
+              searchResults.addAll(filteredResults);
+            else
+              searchResults = filteredResults;
             isSearching = false;
             isMoreLoading = false;
           });
@@ -207,7 +253,11 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   Future<void> searchUsers(String query) async {
     setState(() => isSearchingUsers = true);
     try {
-      final res = await _supabase.from('profiles').select().ilike('username', '%$query%').limit(20);
+      final res = await _supabase
+          .from('profiles')
+          .select()
+          .ilike('username', '%$query%')
+          .limit(20);
       if (mounted) setState(() => userResults = res);
     } catch (e) {
       debugPrint("User search error: $e");
@@ -242,30 +292,89 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF2C3440),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: AppColors.elevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
           padding: const EdgeInsets.all(20),
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Filter and Sort", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Filter and Sort",
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 20),
-                _buildDropdown("SORT BY", selectedSortBy, sortOptions.map((s) => DropdownMenuItem(value: s['value'], child: Text(s['name']!))).toList(), (val) => setModalState(() => selectedSortBy = val!)),
-                _buildDropdown("COUNTRY", selectedCountryCode, countries.map((c) => DropdownMenuItem(value: c['code'], child: Text(c['name']!))).toList(), (val) => setModalState(() => selectedCountryCode = val!)),
-                _buildDropdown("GENRE", selectedGenreId, genres.map((g) => DropdownMenuItem(value: g['id'], child: Text(g['name']!))).toList(), (val) => setModalState(() => selectedGenreId = val!)),
+                _buildDropdown(
+                  "SORT BY",
+                  selectedSortBy,
+                  sortOptions
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s['value'],
+                          child: Text(s['name']!),
+                        ),
+                      )
+                      .toList(),
+                  (val) => setModalState(() => selectedSortBy = val!),
+                ),
+                _buildDropdown(
+                  "COUNTRY",
+                  selectedCountryCode,
+                  countries
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c['code'],
+                          child: Text(c['name']!),
+                        ),
+                      )
+                      .toList(),
+                  (val) => setModalState(() => selectedCountryCode = val!),
+                ),
+                _buildDropdown(
+                  "GENRE",
+                  selectedGenreId,
+                  genres
+                      .map(
+                        (g) => DropdownMenuItem(
+                          value: g['id'],
+                          child: Text(g['name']!),
+                        ),
+                      )
+                      .toList(),
+                  (val) => setModalState(() => selectedGenreId = val!),
+                ),
                 const SizedBox(height: 30),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    minimumSize: const Size(double.infinity, 55),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   onPressed: () {
                     Navigator.pop(context);
                     _applyFilters(); // YENİ: Filtreler uygulandığında güncel listeyi çağır
                   },
-                  child: const Text("SHOW RESULTS", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    "SHOW RESULTS",
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
               ],
@@ -276,17 +385,40 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<DropdownMenuItem<String>> items, Function(String?) onChanged) {
+  Widget _buildDropdown(
+    String label,
+    String value,
+    List<DropdownMenuItem<String>> items,
+    Function(String?) onChanged,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: const Color(0xFF14181C), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white10)),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.divider),
+          ),
           child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(value: value, dropdownColor: const Color(0xFF14181C), isExpanded: true, items: items, onChanged: onChanged, style: const TextStyle(color: Colors.white)),
+            child: DropdownButton<String>(
+              value: value,
+              dropdownColor: AppColors.background,
+              isExpanded: true,
+              items: items,
+              onChanged: onChanged,
+              style: const TextStyle(color: AppColors.textPrimary),
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -296,31 +428,43 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    bool hasActiveFilter = (selectedGenreId.isNotEmpty || selectedCountryCode.isNotEmpty || selectedSortBy != "popularity.desc");
+    bool hasActiveFilter =
+        (selectedGenreId.isNotEmpty ||
+        selectedCountryCode.isNotEmpty ||
+        selectedSortBy != "popularity.desc");
 
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF14181C),
+        backgroundColor: AppColors.background,
         elevation: 0,
         title: TextField(
           controller: _controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: "Search shows or people...", hintStyle: TextStyle(color: Colors.grey), border: InputBorder.none),
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(
+            hintText: "Search shows or people...",
+            hintStyle: TextStyle(color: AppColors.textSecondary),
+            border: InputBorder.none,
+          ),
           onChanged: _onSearchChanged,
         ),
         actions: [
           if (_tabController.index == 0)
             IconButton(
-              icon: Icon(Icons.tune, color: hasActiveFilter ? const Color(0xFF00E054) : Colors.white),
+              icon: Icon(
+                Icons.tune,
+                color: hasActiveFilter
+                    ? AppColors.accent
+                    : AppColors.textPrimary,
+              ),
               onPressed: _openFilterMenu,
-            )
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: const Color(0xFF00E054),
-          labelColor: const Color(0xFF00E054),
-          unselectedLabelColor: Colors.white54,
+          indicatorColor: AppColors.accent,
+          labelColor: AppColors.accent,
+          unselectedLabelColor: AppColors.textSecondary,
           dividerColor: Colors.transparent,
           tabs: const [
             Tab(text: "Shows"),
@@ -330,10 +474,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildShowsTab(hasActiveFilter),
-          _buildUsersTab(),
-        ],
+        children: [_buildShowsTab(hasActiveFilter), _buildUsersTab()],
       ),
     );
   }
@@ -351,13 +492,30 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  const Text("Filters: ", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  if (selectedSortBy != "popularity.desc") _buildFilterChip(_getSortName(selectedSortBy), isSort: true),
-                  if (selectedGenreId.isNotEmpty) _buildFilterChip(_getGenreName(selectedGenreId)),
-                  if (selectedCountryCode.isNotEmpty) _buildFilterChip(_getCountryName(selectedCountryCode)),
+                  const Text(
+                    "Filters: ",
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (selectedSortBy != "popularity.desc")
+                    _buildFilterChip(
+                      _getSortName(selectedSortBy),
+                      isSort: true,
+                    ),
+                  if (selectedGenreId.isNotEmpty)
+                    _buildFilterChip(_getGenreName(selectedGenreId)),
+                  if (selectedCountryCode.isNotEmpty)
+                    _buildFilterChip(_getCountryName(selectedCountryCode)),
                   GestureDetector(
-                    onTap: _clearFilters, // YENİ: Çarpıya basınca gerçekten sıfırla
-                    child: const Icon(Icons.cancel, size: 20, color: Colors.redAccent),
+                    onTap:
+                        _clearFilters, // YENİ: Çarpıya basınca gerçekten sıfırla
+                    child: const Icon(
+                      Icons.cancel,
+                      size: 20,
+                      color: AppColors.error,
+                    ),
                   ),
                 ],
               ),
@@ -366,21 +524,40 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
         Expanded(
           child: isSearching
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.accent),
+                )
               : searchResults.isEmpty
-              ? const Center(child: Text("No shows found.", style: TextStyle(color: Colors.grey)))
+              ? const Center(
+                  child: Text(
+                    "No shows found.",
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                )
               : GridView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3, childAspectRatio: 0.67, crossAxisSpacing: 10, mainAxisSpacing: 10,
-            ),
-            itemCount: searchResults.length,
-            itemBuilder: (context, index) => _buildPosterTile(searchResults[index]),
-          ),
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.67,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: searchResults.length,
+                  itemBuilder: (context, index) =>
+                      _buildPosterTile(searchResults[index]),
+                ),
         ),
         if (isMoreLoading)
-          const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: Color(0xFF00E054)))),
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            ),
+          ),
       ],
     );
   }
@@ -388,30 +565,57 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   // --- PEOPLE SEKME İÇERİĞİ ---
   Widget _buildUsersTab() {
     if (_controller.text.trim().isEmpty) {
-      return const Center(child: Text("Type a username to find people", style: TextStyle(color: Colors.white24)));
+      return const Center(
+        child: Text(
+          "Type a username to find people",
+          style: TextStyle(color: AppColors.textMuted),
+        ),
+      );
     }
-    if (isSearchingUsers) return const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)));
-    if (userResults.isEmpty) return const Center(child: Text("No users found.", style: TextStyle(color: Colors.white24)));
+    if (isSearchingUsers)
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.accent),
+      );
+    if (userResults.isEmpty)
+      return const Center(
+        child: Text(
+          "No users found.",
+          style: TextStyle(color: AppColors.textMuted),
+        ),
+      );
 
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: userResults.length,
-      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 1),
+      separatorBuilder: (context, index) =>
+          const Divider(color: AppColors.divider, height: 1),
       itemBuilder: (context, index) {
         final user = userResults[index];
         final String uName = user['username'] ?? "User";
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          leading: CircleAvatar(
-            radius: 22,
-            backgroundColor: const Color(0xFF2C3440),
-            child: Text(uName[0].toUpperCase(), style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold, fontSize: 18)),
+          leading: EpisodUserAvatar(username: uName, radius: 22, fontSize: 18),
+          title: Text(
+            uName,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
-          title: Text(uName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 14),
+          trailing: const Icon(
+            Icons.arrow_forward_ios,
+            color: AppColors.textMuted,
+            size: 14,
+          ),
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (c) => OtherUserProfileScreen(userId: user['id'])));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => OtherUserProfileScreen(userId: user['id']),
+              ),
+            );
           },
         );
       },
@@ -423,38 +627,72 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-          color: const Color(0xFF2C3440),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSort ? Colors.orange : const Color(0xFF00E054), width: 1)
+        color: AppColors.elevated,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSort ? AppColors.accentSecondary : AppColors.accent,
+          width: 1,
+        ),
       ),
-      child: Text(label, style: TextStyle(color: isSort ? Colors.orange : const Color(0xFF00E054), fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isSort ? AppColors.accentSecondary : AppColors.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
   Widget _buildPosterTile(Map show) {
     final rating = show['vote_average']?.toStringAsFixed(1) ?? '0.0';
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ShowDetailScreen(show: show))),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ShowDetailScreen(show: show)),
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: show['poster_path'] != null
-                ? CachedNetworkImage(imageUrl: "${ApiConfig.imageBaseUrl}${show['poster_path']}", fit: BoxFit.cover, placeholder: (context, url) => Container(color: Colors.grey[900]))
-                : Container(color: Colors.grey[900], child: const Icon(Icons.tv, color: Colors.white24)),
+                ? CachedNetworkImage(
+                    imageUrl: "${ApiConfig.imageBaseUrl}${show['poster_path']}",
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) =>
+                        Container(color: AppColors.elevated),
+                  )
+                : Container(
+                    color: AppColors.elevated,
+                    child: const Icon(Icons.tv, color: AppColors.textMuted),
+                  ),
           ),
           if (rating != '0.0')
             Positioned(
-              top: 6, right: 6,
+              top: 6,
+              right: 6,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(4)),
-                child: Row(children: [
-                  const Icon(Icons.star, size: 10, color: Color(0xFF00E054)),
-                  const SizedBox(width: 2),
-                  Text(rating, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                ]),
+                decoration: BoxDecoration(
+                  color: AppColors.overlayDark,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.star, size: 10, color: AppColors.accent),
+                    const SizedBox(width: 2),
+                    Text(
+                      rating,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/app_colors.dart';
 
 class ReviewDetailScreen extends StatefulWidget {
   final Map review;
@@ -11,7 +12,7 @@ class ReviewDetailScreen extends StatefulWidget {
     super.key,
     required this.review,
     required this.showName,
-    this.posterPath
+    this.posterPath,
   });
 
   @override
@@ -39,17 +40,19 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       // Future.wait'e <Future<dynamic>> tipini vererek hatayı çözüyoruz
       final results = await Future.wait<dynamic>([
         // 1. Ben beğendim mi?
-        _supabase.from('comment_likes')
+        _supabase
+            .from('comment_likes')
             .select()
             .eq('user_id', myId)
             .eq('comment_id', widget.review['id'])
             .maybeSingle(),
 
         // 2. Toplam beğeni sayısı (Hata veren FetchOptions'ı sildik, en sade hali bu)
-        _supabase.from('comment_likes')
+        _supabase
+            .from('comment_likes')
             .select('*')
             .eq('comment_id', widget.review['id'])
-            .count(CountOption.exact)
+            .count(CountOption.exact),
       ]);
 
       if (mounted) {
@@ -73,19 +76,26 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
 
     try {
       if (isLiked) {
-        await _supabase.from('comment_likes')
+        await _supabase
+            .from('comment_likes')
             .delete()
             .eq('user_id', myId)
             .eq('comment_id', widget.review['id']);
 
-        setState(() { isLiked = false; likeCount--; });
+        setState(() {
+          isLiked = false;
+          likeCount--;
+        });
       } else {
         await _supabase.from('comment_likes').insert({
           'user_id': myId,
-          'comment_id': widget.review['id']
+          'comment_id': widget.review['id'],
         });
 
-        setState(() { isLiked = true; likeCount++; });
+        setState(() {
+          isLiked = true;
+          likeCount++;
+        });
       }
     } catch (e) {
       debugPrint("Toggle like error: $e");
@@ -101,13 +111,13 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
     final String username = widget.review['profiles']['username'] ?? "User";
 
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white, size: 28),
-            onPressed: () => Navigator.pop(context)
+          icon: const Icon(Icons.close, color: AppColors.textPrimary, size: 28),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SingleChildScrollView(
@@ -124,23 +134,55 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                   borderRadius: BorderRadius.circular(4),
                   child: widget.posterPath != null
                       ? CachedNetworkImage(
-                    imageUrl: "https://image.tmdb.org/t/p/w154${widget.posterPath}",
-                    width: 100, height: 150, fit: BoxFit.cover,
-                    placeholder: (c,u) => Container(color: Colors.white10),
-                  )
-                      : Container(width: 100, height: 150, color: Colors.white10, child: const Icon(Icons.tv, color: Colors.white24)),
+                          imageUrl:
+                              "https://image.tmdb.org/t/p/w154${widget.posterPath}",
+                          width: 100,
+                          height: 150,
+                          fit: BoxFit.cover,
+                          placeholder: (c, u) =>
+                              Container(color: AppColors.divider),
+                        )
+                      : Container(
+                          width: 100,
+                          height: 150,
+                          color: AppColors.divider,
+                          child: const Icon(
+                            Icons.tv,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.showName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                      Text(
+                        widget.showName,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Text("Review by ", style: TextStyle(color: Colors.white54, fontSize: 14)),
-                          Text(username, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Text(
+                            "Review by ",
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            username,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -148,9 +190,23 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                       Row(
                         children: List.generate(5, (i) {
                           double val = rating / 2;
-                          if (val >= i + 1) return const Icon(Icons.star, color: Color(0xFF00E054), size: 20);
-                          if (val >= i + 0.5) return const Icon(Icons.star_half, color: Color(0xFF00E054), size: 20);
-                          return const Icon(Icons.star_border, color: Colors.white24, size: 20);
+                          if (val >= i + 1)
+                            return const Icon(
+                              Icons.star,
+                              color: AppColors.accent,
+                              size: 20,
+                            );
+                          if (val >= i + 0.5)
+                            return const Icon(
+                              Icons.star_half,
+                              color: AppColors.accent,
+                              size: 20,
+                            );
+                          return const Icon(
+                            Icons.star_border,
+                            color: AppColors.textMuted,
+                            size: 20,
+                          );
                         }),
                       ),
                     ],
@@ -160,14 +216,14 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
             ),
 
             const SizedBox(height: 40),
-            const Divider(color: Colors.white10),
+            const Divider(color: AppColors.divider),
             const SizedBox(height: 24),
 
             // --- İNCELEME METNİ ---
             Text(
               widget.review['content'],
               style: const TextStyle(
-                color: Color(0xFFBDC3C7),
+                color: AppColors.textSecondary,
                 fontSize: 16,
                 height: 1.6,
                 fontWeight: FontWeight.w400,
@@ -186,21 +242,36 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                          color: isLiked ? Colors.orange.withOpacity(0.15) : Colors.white.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: isLiked ? Colors.orange : Colors.white10, width: 1.5)
+                        color: isLiked
+                            ? AppColors.accentSecondary.withValues(alpha: 0.15)
+                            : AppColors.textPrimary.withValues(alpha: 0.05),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isLiked
+                              ? AppColors.accentSecondary
+                              : AppColors.divider,
+                          width: 1.5,
+                        ),
                       ),
                       child: Icon(
-                          isLiked ? Icons.favorite : Icons.favorite_border,
-                          color: isLiked ? Colors.orange : Colors.white54,
-                          size: 32
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked
+                            ? AppColors.accentSecondary
+                            : AppColors.textSecondary,
+                        size: 32,
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                      likeCount == 0 ? "Be the first to like" : "$likeCount likes",
-                      style: const TextStyle(color: Colors.white30, fontSize: 13, fontWeight: FontWeight.bold)
+                    likeCount == 0
+                        ? "Be the first to like"
+                        : "$likeCount likes",
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),

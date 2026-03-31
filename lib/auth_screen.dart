@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/app_colors.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -22,7 +23,9 @@ class _AuthScreenState extends State<AuthScreen> {
       final password = _passwordController.text.trim();
 
       if (input.isEmpty || password.isEmpty) {
-        throw const AuthException("Email/Username and password cannot be empty");
+        throw const AuthException(
+          "Email/Username and password cannot be empty",
+        );
       }
 
       if (_isSignUp) {
@@ -30,14 +33,14 @@ class _AuthScreenState extends State<AuthScreen> {
         if (username.isEmpty) {
           throw const AuthException("Username cannot be empty");
         }
-        
+
         // Check if username is already taken before signing up
         final existingUser = await Supabase.instance.client
             .from('profiles')
             .select('username')
             .eq('username', username)
             .maybeSingle();
-            
+
         if (existingUser != null) {
           throw const AuthException("Username is already taken");
         }
@@ -50,7 +53,9 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Success! Check your email for confirmation.")),
+            const SnackBar(
+              content: Text("Success! Check your email for confirmation."),
+            ),
           );
         }
       } else {
@@ -78,13 +83,16 @@ class _AuthScreenState extends State<AuthScreen> {
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("An error occurred: $e"), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text("An error occurred: $e"),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -95,43 +103,77 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF14181C),
+      backgroundColor: AppColors.background,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const Icon(Icons.tv, size: 80, color: Color(0xFF00E054)),
+              const Icon(Icons.tv, size: 80, color: AppColors.accent),
               const SizedBox(height: 10),
-              const Text("EPISOD", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 4)),
+              const Text(
+                "EPISOD",
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 4,
+                ),
+              ),
               const SizedBox(height: 40),
 
               if (_isSignUp) ...[
-                _buildTextField(_usernameController, "Username", Icons.person, false),
+                _buildTextField(
+                  _usernameController,
+                  "Username",
+                  Icons.person,
+                  false,
+                ),
                 const SizedBox(height: 16),
               ],
-              _buildTextField(_emailController, _isSignUp ? "Email" : "Email or Username", Icons.email, false),
+              _buildTextField(
+                _emailController,
+                _isSignUp ? "Email" : "Email or Username",
+                Icons.email,
+                false,
+              ),
               const SizedBox(height: 16),
-              _buildTextField(_passwordController, "Password", Icons.lock, true),
+              _buildTextField(
+                _passwordController,
+                "Password",
+                Icons.lock,
+                true,
+              ),
               const SizedBox(height: 24),
 
               _isLoading
-                  ? const CircularProgressIndicator(color: Color(0xFF00E054))
+                  ? const CircularProgressIndicator(color: AppColors.accent)
                   : ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00E054),
-                  minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _handleAuth,
-                child: Text(_isSignUp ? "CREATE ACCOUNT" : "SIGN IN",
-                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-              ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        minimumSize: const Size(double.infinity, 55),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _handleAuth,
+                      child: Text(
+                        _isSignUp ? "CREATE ACCOUNT" : "SIGN IN",
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
 
               TextButton(
                 onPressed: () => setState(() => _isSignUp = !_isSignUp),
-                child: Text(_isSignUp ? "Already have an account? Sign In" : "Don't have an account? Join Episod",
-                    style: const TextStyle(color: Colors.grey)),
+                child: Text(
+                  _isSignUp
+                      ? "Already have an account? Sign In"
+                      : "Don't have an account? Join Episod",
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
               ),
             ],
           ),
@@ -140,18 +182,29 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, bool isPassword) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    IconData icon,
+    bool isPassword,
+  ) {
     return TextField(
       controller: controller,
       obscureText: isPassword,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: AppColors.textPrimary),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+        prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 20),
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+        hintStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
         filled: true,
-        fillColor: const Color(0xFF2C3440),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        fillColor: AppColors.surfaceAlt,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
