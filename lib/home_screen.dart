@@ -85,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.bold,
             letterSpacing: 1.5,
             fontSize: 22,
-            color: AppColors.textPrimary,
+            color: AppColors.accent,
           ),
         ),
         centerTitle: true,

@@ -168,12 +168,31 @@ class _AuthScreenState extends State<AuthScreen> {
 
               TextButton(
                 onPressed: () => setState(() => _isSignUp = !_isSignUp),
-                child: Text(
-                  _isSignUp
-                      ? "Already have an account? Sign In"
-                      : "Don't have an account? Join Episod",
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
+                child: _isSignUp
+                    ? RichText(
+                        text: const TextSpan(
+                          text: "Already have an account? ",
+                          style: TextStyle(color: AppColors.textSecondary),
+                          children: [
+                            TextSpan(
+                              text: "Sign In",
+                              style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RichText(
+                        text: const TextSpan(
+                          text: "Don't have an account? ",
+                          style: TextStyle(color: AppColors.textSecondary),
+                          children: [
+                            TextSpan(
+                              text: "Join Episod",
+                              style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
             ],
           ),

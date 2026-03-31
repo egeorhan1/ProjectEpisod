@@ -93,6 +93,29 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Trailer not found.")));
       return;
     }
+
+    bool? proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text("Leaving Episod", style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text("You are about to open YouTube to watch the trailer. Do you want to continue?", style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel", style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Continue", style: TextStyle(color: AppColors.textPrimary)),
+          ),
+        ],
+      ),
+    );
+
+    if (proceed != true) return;
+
     final url = Uri.parse("https://www.youtube.com/watch?v=$trailerKey");
     if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
   }
