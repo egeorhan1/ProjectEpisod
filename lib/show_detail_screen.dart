@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart'; // Fragman açmak için
+import 'package:url_launcher/url_launcher.dart';
 import 'api_config.dart';
 import 'show_credits_screen.dart';
 import 'episode_detail_screen.dart';
@@ -33,7 +33,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   bool isLiked = false;
   bool isWatched = false;
 
-  // Puanlama Sistemi Değişkenleri
   double showEpoint = 0.0;
   double myRating = 0.0;
   String myReviewContent = "";
@@ -41,9 +40,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   List<int> ratingDistribution = List.filled(10, 0);
   int totalRatingsCount = 0;
 
-  // Fragman değişkeni
   String? trailerKey;
-
   Color activeColor = const Color(0xFF14181C);
 
   @override
@@ -52,7 +49,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     _loadAllPageData();
   }
 
-  // --- TÜM SAYFAYI YENİLEYEN ANA SİSTEM ---
   Future<void> _loadAllPageData() async {
     await Future.wait([
       _checkStatus(),
@@ -60,109 +56,77 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       fetchFullDetails(),
       fetchSeriesCast(),
       _generatePalette(),
-      fetchTrailer(), // Fragman verisini çek
+      fetchTrailer(),
     ]);
     if (mounted) setState(() => isInitialLoading = false);
   }
 
-  // --- FRAGMAN VERİSİNİ TMDB'DEN ÇEKER ---
-  Future<void> fetchTrailer() async {
-    try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/tv/${widget.show['id']}/videos?api_key=${ApiConfig.apiKey}');
-      final res = await http.get(url);
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        final List videos = data['results'];
-        // Öncelikle "Trailer" olanı ve YouTube'da olanı bul
-        final trailer = videos.firstWhere(
-              (v) => v['type'] == 'Trailer' && v['site'] == 'YouTube',
-          orElse: () => videos.firstWhere((v) => v['site'] == 'YouTube', orElse: () => null),
-        );
-        if (mounted && trailer != null) {
-          setState(() => trailerKey = trailer['key']);
-        }
-      }
-    } catch (e) {
-      debugPrint("Trailer error: $e");
-    }
-  }
-
-  // --- FRAGMANI DIŞ UYGULAMADA AÇAR ---
-  Future<void> _launchTrailer() async {
-    if (trailerKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Trailer not available for this show.")));
-      return;
-    }
-    final url = Uri.parse("https://www.youtube.com/watch?v=$trailerKey");
+  Future<void> _launchSpotify() async {
+    final showName = Uri.encodeComponent("${widget.show['name']} soundtrack");
+    final url = Uri.parse("https://open.spotify.com/search/$showName");
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 
+  Future<void> fetchTrailer() async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/tv/${widget.show['id']}/videos?api_key=${ApiConfig.apiKey}');
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final List videos = json.decode(res.body)['results'];
+        final trailer = videos.firstWhere(
+              (v) => v['type'] == 'Trailer' && v['site'] == 'YouTube',
+          orElse: () => videos.firstWhere((v) => v['site'] == 'YouTube', orElse: () => videos.isNotEmpty ? videos.first : null),
+        );
+        if (mounted && trailer != null) setState(() => trailerKey = trailer['key']);
+      }
+    } catch (e) { debugPrint("Trailer error: $e"); }
+  }
+
+  Future<void> _launchTrailer() async {
+    if (trailerKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Trailer not found.")));
+      return;
+    }
+    final url = Uri.parse("https://www.youtube.com/watch?v=$trailerKey");
+    if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _fetchShowEpoint() async {
     try {
-      final res = await _supabase
-          .from('comments')
-          .select('rating')
-          .eq('show_id', widget.show['id'])
-          .filter('season_number', 'is', null)
-          .filter('episode_number', 'is', null)
-          .not('rating', 'is', null);
-
-      List<int> dist = List.filled(10, 0);
-      double total = 0;
-
+      final res = await _supabase.from('comments').select('rating').eq('show_id', widget.show['id']).filter('season_number', 'is', null).filter('episode_number', 'is', null).not('rating', 'is', null);
+      List<int> dist = List.filled(10, 0); double total = 0;
       if (res.isNotEmpty) {
         for (var item in res) {
           double r = (item['rating'] as num).toDouble();
-          total += r;
-          int index = r.round() - 1;
+          total += r; int index = r.round() - 1;
           if (index >= 0 && index < 10) dist[index]++;
         }
       }
-
-      if (mounted) {
-        setState(() {
-          showEpoint = res.isNotEmpty ? (total / res.length) : 0.0;
-          ratingDistribution = dist;
-          totalRatingsCount = res.length;
-        });
-      }
+      if (mounted) setState(() { showEpoint = res.isNotEmpty ? (total / res.length) : 0.0; ratingDistribution = dist; totalRatingsCount = res.length; });
     } catch (e) { debugPrint("Epoint error: $e"); }
   }
 
   Future<void> _checkStatus() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
+    final user = _supabase.auth.currentUser; if (user == null) return;
     try {
       final results = await Future.wait<dynamic>([
         _supabase.from('liked_shows').select().eq('user_id', user.id).eq('show_id', widget.show['id']).maybeSingle(),
         _supabase.from('watched_shows').select().eq('user_id', user.id).eq('show_id', widget.show['id']).maybeSingle(),
-        _supabase.from('comments')
-            .select()
-            .eq('user_id', user.id)
-            .eq('show_id', widget.show['id'])
-            .filter('season_number', 'is', null)
-            .filter('episode_number', 'is', null)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle()
+        _supabase.from('comments').select().eq('user_id', user.id).eq('show_id', widget.show['id']).filter('season_number', 'is', null).filter('episode_number', 'is', null).order('created_at', ascending: false).limit(1).maybeSingle()
       ]);
-
       if (mounted) {
         setState(() {
           isLiked = results[0] != null;
           isWatched = results[1] != null;
-
-          final userReview = results[2] as Map<String, dynamic>?;
-          if (userReview != null) {
-            myRating = (userReview['rating'] as num).toDouble();
-            myReviewContent = userReview['content'] ?? "";
-            myReviewId = userReview['id'];
+          final uR = results[2] as Map<String, dynamic>?;
+          if (uR != null) {
+            myRating = (uR['rating'] as num).toDouble();
+            myReviewContent = uR['content'] ?? "";
+            myReviewId = uR['id'];
           } else {
-            myRating = 0.0;
-            myReviewContent = "";
-            myReviewId = null;
+            myRating = 0.0; myReviewContent = ""; myReviewId = null;
           }
         });
       }
@@ -220,105 +184,48 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   void _openReviewModal(BuildContext context, int showId, String showName) {
     double currentRating = myRating > 0 ? myRating / 2 : 0.0;
     final TextEditingController reviewController = TextEditingController(text: myReviewContent);
-
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2329),
+      context: context, isScrollControlled: true, backgroundColor: const Color(0xFF1E2329),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 24),
         child: StatefulBuilder(
           builder: (context, setModalState) {
             return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(myReviewId != null ? "Edit Your Review" : "Rate & Review $showName",
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                Text(myReviewId != null ? "Edit Your Review" : "Rate & Review $showName", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
-                const Text("Your Rating", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (index) {
+                  return GestureDetector(
+                    onTapDown: (d) { setModalState(() { if (d.localPosition.dx < 20) currentRating = index + 0.5; else currentRating = index + 1.0; }); },
+                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(currentRating >= index + 1 ? Icons.star : currentRating >= index + 0.5 ? Icons.star_half : Icons.star_border, color: currentRating > index ? const Color(0xFF00E054) : Colors.white24, size: 40)),
+                  );
+                })),
                 const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    return GestureDetector(
-                      onTapDown: (TapDownDetails details) {
-                        setModalState(() {
-                          if (details.localPosition.dx < 20) currentRating = index + 0.5;
-                          else currentRating = index + 1.0;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Icon(
-                          currentRating >= index + 1 ? Icons.star : currentRating >= index + 0.5 ? Icons.star_half : Icons.star_border,
-                          color: currentRating > index ? const Color(0xFF00E054) : Colors.white24,
-                          size: 40,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 8),
-                Text("$currentRating Stars", style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold, fontSize: 14)),
+                Text("$currentRating Stars", style: const TextStyle(color: Color(0xFF00E054), fontWeight: FontWeight.bold)),
                 const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFF14181C), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
-                  child: TextField(
-                    controller: reviewController,
-                    maxLines: 4,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                    decoration: const InputDecoration(hintText: "Review...", hintStyle: TextStyle(color: Colors.white24), border: InputBorder.none),
-                  ),
-                ),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), decoration: BoxDecoration(color: const Color(0xFF14181C), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)), child: TextField(controller: reviewController, maxLines: 4, style: const TextStyle(color: Colors.white, fontSize: 14), decoration: const InputDecoration(hintText: "What do you think?", hintStyle: TextStyle(color: Colors.white24), border: InputBorder.none))),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () async {
                     if (currentRating == 0) return;
                     final user = _supabase.auth.currentUser;
                     if (user != null) {
-                      final data = {
-                        'user_id': user.id,
-                        'show_id': showId,
-                        'content': reviewController.text.trim().isEmpty ? "Rated $currentRating stars" : reviewController.text.trim(),
-                        'rating': currentRating * 2,
-                        'season_number': null,
-                        'episode_number': null,
-                      };
-
+                      final data = { 'user_id': user.id, 'show_id': showId, 'content': reviewController.text.trim().isEmpty ? "Rated $currentRating stars" : reviewController.text.trim(), 'rating': currentRating * 2, 'season_number': null, 'episode_number': null };
                       try {
-                        // FIX: Explicitly check if we are updating an existing review or creating a new one
                         if (myReviewId != null) {
-                          // Update existing review using its ID
-                          await _supabase
-                              .from('comments')
-                              .update(data)
-                              .eq('id', myReviewId!);
+                          await _supabase.from('comments').update(data).eq('id', myReviewId!);
                         } else {
-                          // Insert new review
-                          await _supabase
-                              .from('comments')
-                              .insert(data);
+                          await _supabase.from('comments').insert(data);
                         }
-
                         await _loadAllPageData();
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Success!"), backgroundColor: Color(0xFF00E054)));
-                        }
-                      } catch (e) {
-                        debugPrint("Save Error: $e");
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-                        }
-                      }
+                        if (context.mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review saved!"), backgroundColor: Color(0xFF00E054))); }
+                      } catch (e) { debugPrint("Save Error: $e"); }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: Text(myReviewId != null ? "UPDATE REVIEW" : "SAVE REVIEW", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: Text(myReviewId != null ? "UPDATE REVIEW" : "SAVE REVIEW", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 30),
               ],
@@ -338,16 +245,13 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
         children: [
           Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [activeColor.withOpacity(0.3), const Color(0xFF14181C)], stops: const [0.0, 0.4]))),
           RefreshIndicator(
-            onRefresh: _loadAllPageData,
-            color: const Color(0xFF00E054),
-            backgroundColor: const Color(0xFF14181C),
+            onRefresh: _loadAllPageData, color: const Color(0xFF00E054), backgroundColor: const Color(0xFF14181C),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
                   expandedHeight: 280, pinned: true, elevation: 0, backgroundColor: const Color(0xFF14181C),
-                  surfaceTintColor: Colors.transparent, // Yeşil renk fix
-                  scrolledUnderElevation: 0, // Yeşil renk fix
+                  surfaceTintColor: Colors.transparent, scrolledUnderElevation: 0,
                   leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20), onPressed: () => Navigator.pop(context)),
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(fit: StackFit.expand, children: [
@@ -402,8 +306,9 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
           const SizedBox(width: 12),
           _actionBtn(Icons.star_rate_rounded, myRating > 0 ? const Color(0xFF00E054) : Colors.amber, () => _openReviewModal(context, widget.show['id'], widget.show['name'])),
           const SizedBox(width: 12),
-          // YENİ FRAGMAN BUTONU
           _actionBtn(Icons.play_circle_fill, Colors.white, _launchTrailer),
+          const SizedBox(width: 12),
+          _actionBtn(Icons.music_note, const Color(0xFF1DB954), _launchSpotify),
         ])
       ]))
     ]);
@@ -417,8 +322,8 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         const Padding(padding: EdgeInsets.only(bottom: 2.0, right: 8.0), child: Icon(Icons.star, color: Color(0xFF00E054), size: 12)),
         Expanded(child: SizedBox(height: 35, child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(10, (index) {
-          double heightPercent = ratingDistribution[index] / maxCount;
-          return Expanded(child: Container(margin: const EdgeInsets.only(right: 1), height: (30 * heightPercent) + 4, decoration: const BoxDecoration(color: Color(0xFF384250), borderRadius: BorderRadius.vertical(top: Radius.circular(2)))) );
+          double hP = ratingDistribution[index] / maxCount;
+          return Expanded(child: Container(margin: const EdgeInsets.only(right: 1), height: (30 * hP) + 4, decoration: const BoxDecoration(color: Color(0xFF384250), borderRadius: BorderRadius.vertical(top: Radius.circular(2)))) );
         })))),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -434,8 +339,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   }
 
   Widget _buildCommunitySection() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("COMMUNITY", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1.2)), const SizedBox(height: 16), Row(children: [Expanded(child: _communityBtn("FORUM", Icons.forum_outlined, () => Navigator.push(context, MaterialPageRoute(builder: (c) => ForumScreen(showId: widget.show['id'], showName: widget.show['name']))))), const SizedBox(width: 12), Expanded(child: _communityBtn("REVIEWS", Icons.rate_review_outlined, () => Navigator.push(context, MaterialPageRoute(builder: (c) => ShowReviewsScreen(showId: widget.show['id'], showName: widget.show['name'], posterPath: widget.show['poster_path'])))))] )]);
-
-  Widget _communityBtn(String title, IconData icon, VoidCallback onTap) => GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)), child: Column(children: [Icon(icon, color: const Color(0xFF00E054), size: 20), const SizedBox(height: 6), Text(title, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))])));
+  Widget _communityBtn(String t, IconData i, VoidCallback o) => GestureDetector(onTap: o, child: Container(padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)), child: Column(children: [Icon(i, color: const Color(0xFF00E054), size: 20), const SizedBox(height: 6), Text(t, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))])));
 
   Widget _buildEpisodeList() {
     if (isEpisodesLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF00E054)));
@@ -463,16 +367,38 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   Widget _buildSeasonPicker() { final seasons = fullDetails?['seasons'] ?? []; return SizedBox(height: 35, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: seasons.length, itemBuilder: (context, i) { final s = seasons[i]; final isSel = selectedSeasonNumber == s['season_number']; return GestureDetector(onTap: () { setState(() => selectedSeasonNumber = s['season_number']); fetchEpisodes(s['season_number']); }, child: Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: isSel ? const Color(0xFF00E054) : const Color(0xFF2C3440), borderRadius: BorderRadius.circular(20)), alignment: Alignment.center, child: Text("S${s['season_number']}", style: TextStyle(color: isSel ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 11)))); })); }
 
   Future<void> _toggleLike() async {
-    final user = _supabase.auth.currentUser; if (user == null) return;
-    if (isLiked) await _supabase.from('liked_shows').delete().eq('user_id', user.id).eq('show_id', widget.show['id']);
-    else await _supabase.from('liked_shows').insert({'user_id': user.id, 'show_id': widget.show['id'], 'show_name': widget.show['name'], 'poster_path': widget.show['poster_path']});
-    setState(() => isLiked = !isLiked);
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    bool isAdding = !isLiked;
+    try {
+      if (isLiked) {
+        await _supabase.from('liked_shows').delete().eq('user_id', user.id).eq('show_id', widget.show['id']);
+      } else {
+        await _supabase.from('liked_shows').insert({'user_id': user.id, 'show_id': widget.show['id'], 'show_name': widget.show['name'], 'poster_path': widget.show['poster_path']});
+      }
+      setState(() => isLiked = !isLiked);
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isAdding ? "Added to Favorites! ❤️" : "Removed from Favorites", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: isAdding ? const Color(0xFFE50914) : Colors.grey[800], duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))));
+      }
+    } catch (e) { debugPrint("Like error: $e"); }
   }
 
   Future<void> _toggleWatched() async {
-    final user = _supabase.auth.currentUser; if (user == null) return;
-    if (isWatched) await _supabase.from('watched_shows').delete().eq('user_id', user.id).eq('show_id', widget.show['id']);
-    else await _supabase.from('watched_shows').insert({'user_id': user.id, 'show_id': widget.show['id'], 'show_name': widget.show['name'], 'poster_path': widget.show['poster_path']});
-    setState(() => isWatched = !isWatched);
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    bool isAdding = !isWatched;
+    try {
+      if (isWatched) {
+        await _supabase.from('watched_shows').delete().eq('user_id', user.id).eq('show_id', widget.show['id']);
+      } else {
+        await _supabase.from('watched_shows').insert({'user_id': user.id, 'show_id': widget.show['id'], 'show_name': widget.show['name'], 'poster_path': widget.show['poster_path']});
+      }
+      setState(() => isWatched = !isWatched);
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isAdding ? "Marked as Watched! 📺" : "Removed from Watched", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)), backgroundColor: isAdding ? const Color(0xFF00E054) : Colors.grey[800], duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))));
+      }
+    } catch (e) { debugPrint("Watch error: $e"); }
   }
 }

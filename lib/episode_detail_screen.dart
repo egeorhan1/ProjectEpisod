@@ -28,10 +28,10 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   bool isInitialLoading = true;
   bool isWatched = false;
 
-  // Puanlama Sistemi Değişkenleri
   double averageEpoint = 0.0;
   double myRating = 0.0;
   String myReviewContent = "";
+  int? myReviewId;
   List<int> ratingDistribution = List.filled(10, 0);
   int totalRatingsCount = 0;
 
@@ -41,7 +41,6 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
     _loadAllData();
   }
 
-  // --- TÜM VERİLERİ YÜKLE ---
   Future<void> _loadAllData() async {
     final user = _supabase.auth.currentUser;
     if (user == null) {
@@ -51,27 +50,9 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
 
     try {
       final results = await Future.wait<dynamic>([
-        // 1. İzlenme Durumu
         _supabase.from('watched_episodes').select().eq('user_id', user.id).eq('show_id', widget.showId).eq('season_number', widget.seasonNumber).eq('episode_number', widget.episode['episode_number']).maybeSingle(),
-
-        // 2. Grafik ve Ortalama için Tüm Puanlar
-        _supabase.from('comments')
-            .select('rating')
-            .eq('show_id', widget.showId)
-            .eq('season_number', widget.seasonNumber)
-            .eq('episode_number', widget.episode['episode_number'])
-            .not('rating', 'is', null),
-
-        // 3. Benim Puanım/Yorumum
-        _supabase.from('comments')
-            .select()
-            .eq('user_id', user.id)
-            .eq('show_id', widget.showId)
-            .eq('season_number', widget.seasonNumber)
-            .eq('episode_number', widget.episode['episode_number'])
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle(),
+        _supabase.from('comments').select('rating').eq('show_id', widget.showId).eq('season_number', widget.seasonNumber).eq('episode_number', widget.episode['episode_number']).not('rating', 'is', null),
+        _supabase.from('comments').select().eq('user_id', user.id).eq('show_id', widget.showId).eq('season_number', widget.seasonNumber).eq('episode_number', widget.episode['episode_number']).order('created_at', ascending: false).limit(1).maybeSingle(),
       ]);
 
       final allRatings = results[1] as List;
@@ -97,8 +78,9 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           if (userReview != null) {
             myRating = (userReview['rating'] as num).toDouble();
             myReviewContent = userReview['content'] ?? "";
+            myReviewId = userReview['id'];
           } else {
-            myRating = 0.0; myReviewContent = "";
+            myRating = 0.0; myReviewContent = ""; myReviewId = null;
           }
           isInitialLoading = false;
         });
@@ -112,14 +94,31 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   Future<void> _toggleWatched() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
+
+    bool isAdding = !isWatched;
+
     try {
       if (isWatched) {
         await _supabase.from('watched_episodes').delete().eq('user_id', user.id).eq('show_id', widget.showId).eq('season_number', widget.seasonNumber).eq('episode_number', widget.episode['episode_number']);
       } else {
         await _supabase.from('watched_episodes').insert({'user_id': user.id, 'show_id': widget.showId, 'season_number': widget.seasonNumber, 'episode_number': widget.episode['episode_number']});
       }
+
       setState(() => isWatched = !isWatched);
-    } catch (e) { debugPrint("EP Watch error: $e"); }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isAdding ? "Episode Watched! ✅" : "Episode Unwatched", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            backgroundColor: isAdding ? const Color(0xFF00E054) : Colors.grey[800],
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) { debugPrint("Watched toggle error: $e"); }
   }
 
   void _openReviewModal(BuildContext context) {
@@ -189,17 +188,24 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                         'rating': currentRating * 2,
                       };
 
-                      await _supabase.from('comments').upsert(data);
-                      await _loadAllData(); // Anlık güncelleme
+                      try {
+                        if (myReviewId != null) {
+                          await _supabase.from('comments').update(data).eq('id', myReviewId!);
+                        } else {
+                          await _supabase.from('comments').insert(data);
+                        }
 
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Success!"), backgroundColor: Color(0xFF00E054)));
-                      }
+                        await _loadAllData();
+
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Success!"), backgroundColor: Color(0xFF00E054)));
+                        }
+                      } catch (e) { debugPrint("Save Error: $e"); }
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E054), minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text("SAVE", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  child: Text(myReviewId != null ? "UPDATE" : "SAVE", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 30),
               ],
@@ -227,7 +233,7 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _buildHeader(),
           Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 100), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _buildScores(), // Sadece TMDB puanını gösterir
+            _buildScores(),
             const SizedBox(height: 24),
             Row(children: [
               _actionBtn(isWatched ? Icons.check_circle : Icons.visibility_outlined, isWatched ? const Color(0xFF00E054) : Colors.white, _toggleWatched, isWatched ? "Watched" : "Watch"),
@@ -235,7 +241,7 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
               _actionBtn(Icons.star_rate_rounded, myRating > 0 ? const Color(0xFF00E054) : Colors.amber, () => _openReviewModal(context), "Rate"),
             ]),
             const SizedBox(height: 32),
-            _buildRatingsSection(), // Grafik + Ortalama EPOINT + Kişisel Puan Kutusu
+            _buildRatingsSection(),
             const SizedBox(height: 32),
             _buildOverview(),
             const SizedBox(height: 40),
@@ -255,7 +261,6 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
     ]);
   }
 
-  // SADECE TMDB SKORU
   Widget _buildScores() => Row(children: [
     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text("TMDB", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -268,7 +273,6 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
     ])
   ]);
 
-  // TÜM PUANLAMA BÖLÜMÜ (Show Detail ile aynı stil)
   Widget _buildRatingsSection() {
     int maxCount = ratingDistribution.reduce(max); if (maxCount == 0) maxCount = 1;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
