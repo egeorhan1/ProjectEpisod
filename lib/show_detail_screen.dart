@@ -96,21 +96,79 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
 
     bool? proceed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text("Leaving Episod", style: TextStyle(color: AppColors.textPrimary)),
-        content: const Text("You are about to open YouTube to watch the trailer. Do you want to continue?", style: TextStyle(color: AppColors.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel", style: TextStyle(color: AppColors.textSecondary)),
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.divider, width: 1),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Continue", style: TextStyle(color: AppColors.textPrimary)),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // YouTube icon badge
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.accent.withOpacity(0.4), width: 1.5),
+                ),
+                child: const Icon(Icons.play_circle_fill, color: AppColors.accent, size: 36),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Opening YouTube",
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "You're about to leave Episod and watch the trailer on YouTube.",
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              // Continue button with YouTube red gradient
+              GestureDetector(
+                onTap: () => Navigator.pop(context, true),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.accent, AppColors.accent.withOpacity(0.75)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: AppColors.accent.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.open_in_new_rounded, color: Colors.white, size: 16),
+                      SizedBox(width: 8),
+                      Text("Open in YouTube", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Cancel button
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text("Cancel", style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
 
@@ -260,12 +318,16 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                         'episode_number': null
                       };
                       try {
-                        // 1. Yorumu/Puanı Kaydet
-                        await _supabase.from('comments').upsert(data);
+                        // 1. YORUMU/PUANI KAYDET VEYA GÜNCELLE (Hata çözümü)
+                        if (myReviewId != null) {
+                          await _supabase.from('comments').update(data).eq('id', myReviewId!);
+                        } else {
+                          await _supabase.from('comments').insert(data);
+                        }
 
                         // 2. OTOMATİK İZLENDİ İŞARETLE (Eğer işaretli değilse)
                         if (!isWatched) {
-                          await _supabase.from('watched_shows').upsert({
+                          await _supabase.from('watched_shows').insert({
                             'user_id': user.id,
                             'show_id': widget.show['id'],
                             'show_name': widget.show['name'],
@@ -278,8 +340,8 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                         if (context.mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: const Text("Review saved & Marked as watched! 📺", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                              const SnackBar(
+                                  content: Text("Review saved & Marked as watched! 📺", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
                                   backgroundColor: AppColors.success,
                                   behavior: SnackBarBehavior.floating
                               )
@@ -457,7 +519,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
   }
 
   Widget _actionBtn(IconData i, Color c, VoidCallback t) => GestureDetector(onTap: t, child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8)), child: Icon(i, color: c, size: 20)));
-  Widget _sectionHeader(String t, VoidCallback o) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(t, style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)), GestureDetector(onTap: o, child: Text("View All", style: TextStyle(color: AppColors.accentSecondary, fontWeight: FontWeight.bold, fontSize: 10)))]);
+  Widget _sectionHeader(String t, VoidCallback o) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(t, style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)), GestureDetector(onTap: o, child: const Text("View All", style: TextStyle(color: AppColors.accentSecondary, fontWeight: FontWeight.bold, fontSize: 10)))]);
 
   // YENİ: TIKLANABİLİR CAST LİSTESİ
   Widget _buildCastList() => SizedBox(height: 120, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: seriesCast.length, itemBuilder: (context, i) {

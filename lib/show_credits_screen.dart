@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../api_config.dart';
 import 'theme/app_colors.dart';
+import 'person_detail_screen.dart';
 
 class ShowCreditsScreen extends StatefulWidget {
   final int showId;
@@ -171,6 +172,7 @@ class _ShowCreditsScreenState extends State<ShowCreditsScreen>
       itemBuilder: (context, index) {
         final person = cast[index];
         return _buildPersonTile(
+          id: person['id'],
           name: person['name'],
           sub: person['roles'] != null
               ? person['roles'][0]['character']
@@ -216,6 +218,7 @@ class _ShowCreditsScreenState extends State<ShowCreditsScreen>
             ...members
                 .map(
                   (m) => _buildPersonTile(
+                    id: m['id'],
                     name: m['name'],
                     sub: m['jobs'][0]['job'],
                     path: m['profile_path'],
@@ -233,12 +236,24 @@ class _ShowCreditsScreenState extends State<ShowCreditsScreen>
   }
 
   Widget _buildPersonTile({
+    required int id,
     required String name,
     required String sub,
     String? path,
     String? extra,
   }) {
     return ListTile(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (c) => PersonDetailScreen(
+              personId: id,
+              personName: name,
+            ),
+          ),
+        );
+      },
       leading: CircleAvatar(
         radius: 22,
         backgroundColor: AppColors.elevated,

@@ -78,24 +78,53 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     }
   }
 
+  // Poster'ı veya bilgisi olmayan dizileri filtrele
+  List _filterShows(List shows) => shows.where((s) =>
+    s['poster_path'] != null &&
+    s['poster_path'] != '' &&
+    s['overview'] != null &&
+    (s['overview'] as String).isNotEmpty
+  ).toList();
+
   Future<void> _searchAll(String query) async {
     setState(() => isSearching = true);
     try {
       final tvUrl = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&page=$currentPage');
       final personUrl = Uri.parse('${ApiConfig.baseUrl}/search/person?api_key=${ApiConfig.apiKey}&query=$query');
+      final keywordUrl = Uri.parse('${ApiConfig.baseUrl}/search/keyword?api_key=${ApiConfig.apiKey}&query=$query');
       final userQuery = _supabase.from('profiles').select().ilike('username', '%$query%').limit(15);
 
       final responses = await Future.wait<dynamic>([
         http.get(tvUrl),
         http.get(personUrl),
+        http.get(keywordUrl),
         userQuery,
       ]);
 
+      final List tvResults = _filterShows(json.decode((responses[0] as http.Response).body)['results']);
+      final List keywords = json.decode((responses[2] as http.Response).body)['results'];
+
+      // Keyword ID'lerini al ve keyword'e göre dizi ara
+      List keywordShows = [];
+      if (keywords.isNotEmpty) {
+        final keywordIds = keywords.take(5).map((k) => k['id'].toString()).join('|');
+        final discoverUrl = Uri.parse('${ApiConfig.baseUrl}/discover/tv?api_key=${ApiConfig.apiKey}&with_keywords=$keywordIds&sort_by=popularity.desc');
+        final discoverRes = await http.get(discoverUrl);
+        if (discoverRes.statusCode == 200) {
+          keywordShows = _filterShows(json.decode(discoverRes.body)['results']);
+        }
+      }
+
+      // Doğrudan arama sonuçlarını keyword sonuçlarıyla birleştir (tekrarsız)
+      final existingIds = tvResults.map((s) => s['id']).toSet();
+      final uniqueKeywordShows = keywordShows.where((s) => !existingIds.contains(s['id'])).toList();
+      final merged = [...tvResults, ...uniqueKeywordShows];
+
       if (mounted) {
         setState(() {
-          searchResults = json.decode((responses[0] as http.Response).body)['results'];
+          searchResults = merged;
           actorResults = json.decode((responses[1] as http.Response).body)['results'];
-          userResults = responses[2] as List;
+          userResults = responses[3] as List;
           isSearching = false;
         });
       }
@@ -112,10 +141,9 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     try {
       final res = await http.get(Uri.parse(url));
       if (res.statusCode == 200) {
-        final List results = json.decode(res.body)['results'];
+        final List results = _filterShows(json.decode(res.body)['results']);
         if (mounted) {
           setState(() {
-            // YENİ SAYFA EKLENİRKEN ESKİLERİ SİLME, ALTINA EKLE (addAll)
             if (currentPage == 1) {
               searchResults = results;
             } else {
@@ -152,7 +180,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       final tvUrl = Uri.parse('${ApiConfig.baseUrl}/search/tv?api_key=${ApiConfig.apiKey}&query=$query&page=$currentPage');
       final res = await http.get(tvUrl);
       if (res.statusCode == 200) {
-        final List results = json.decode(res.body)['results'];
+        final List results = _filterShows(json.decode(res.body)['results']);
         if (mounted) {
           setState(() {
             searchResults.addAll(results); // Altına ekle

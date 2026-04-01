@@ -284,6 +284,7 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                       };
 
                       try {
+                        // 1. Yorumu / Puanı Güncelle Veya Kaydet
                         if (myReviewId != null) {
                           await _supabase
                               .from('comments')
@@ -293,14 +294,24 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                           await _supabase.from('comments').insert(data);
                         }
 
+                        // 2. OTOMATİK İZLENDİ İŞARETLE (Eğer işaretli değilse)
+                        if (!isWatched) {
+                          await _supabase.from('watched_episodes').insert({
+                            'user_id': user.id,
+                            'show_id': widget.showId,
+                            'season_number': widget.seasonNumber,
+                            'episode_number': widget.episode['episode_number'],
+                          });
+                        }
+
                         await _loadAllData();
 
                         if (context.mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Success!"),
-                              backgroundColor: AppColors.accent,
+                              content: Text("Success! Episode Watched! ✅", style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                              backgroundColor: AppColors.success,
                             ),
                           );
                         }
@@ -405,7 +416,7 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                         myRating > 0
                             ? AppColors.accent
                             : AppColors.accentSecondary,
-                        () => _openReviewModal(context),
+                            () => _openReviewModal(context),
                         "Rate",
                       ),
                     ],
@@ -430,22 +441,22 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
       children: [
         widget.episode['still_path'] != null
             ? CachedNetworkImage(
-                imageUrl:
-                    "https://image.tmdb.org/t/p/w780${widget.episode['still_path']}",
-                width: double.infinity,
-                height: 280,
-                fit: BoxFit.cover,
-              )
+          imageUrl:
+          "https://image.tmdb.org/t/p/w780${widget.episode['still_path']}",
+          width: double.infinity,
+          height: 280,
+          fit: BoxFit.cover,
+        )
             : Container(
-                height: 280,
-                width: double.infinity,
-                color: AppColors.divider,
-                child: const Icon(
-                  Icons.movie,
-                  color: AppColors.textMuted,
-                  size: 50,
-                ),
-              ),
+          height: 280,
+          width: double.infinity,
+          color: AppColors.divider,
+          child: const Icon(
+            Icons.movie,
+            color: AppColors.textMuted,
+            size: 50,
+          ),
+        ),
         Positioned(
           bottom: 0,
           left: 0,
@@ -572,8 +583,8 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                     IconData i = (val >= index + 1)
                         ? Icons.star
                         : (val >= index + 0.5
-                              ? Icons.star_half
-                              : Icons.star_border);
+                        ? Icons.star_half
+                        : Icons.star_border);
                     return Icon(i, color: AppColors.accent, size: 10);
                   }),
                 ),
@@ -616,8 +627,8 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
                     IconData i = (val >= index + 1)
                         ? Icons.star
                         : (val >= index + 0.5
-                              ? Icons.star_half
-                              : Icons.star_border);
+                        ? Icons.star_half
+                        : Icons.star_border);
                     return Icon(i, color: AppColors.textPrimary, size: 12);
                   }),
                 ),
@@ -656,11 +667,11 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   );
 
   Widget _actionBtn(
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-    String label,
-  ) => Expanded(
+      IconData icon,
+      Color color,
+      VoidCallback onTap,
+      String label,
+      ) => Expanded(
     child: GestureDetector(
       onTap: onTap,
       child: Container(
