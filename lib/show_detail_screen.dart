@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:palette_generator/palette_generator.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api_config.dart';
@@ -45,7 +45,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
 
   // Ekstra Özellikler
   String? trailerKey;
-  Color activeColor = AppColors.background;
 
   @override
   void initState() {
@@ -59,7 +58,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       _fetchShowEpoint(),
       fetchFullDetails(),
       fetchSeriesCast(),
-      _generatePalette(),
       fetchTrailer(),
     ]);
     if (mounted) setState(() => isInitialLoading = false);
@@ -258,13 +256,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     } catch (e) { debugPrint("Cast error: $e"); }
   }
 
-  Future<void> _generatePalette() async {
-    if (widget.show['poster_path'] == null) return;
-    try {
-      final p = await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider("https://image.tmdb.org/t/p/w342${widget.show['poster_path']}"));
-      if (mounted) setState(() => activeColor = p.dominantColor?.color.withOpacity(0.2) ?? AppColors.background);
-    } catch (e) { debugPrint("Palette error: $e"); }
-  }
+
 
   // --- ÖDÜL RADARI HİLESİ ---
   List<String> _detectAwards(String? overview) {
@@ -367,10 +359,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
     if (isInitialLoading) return const Scaffold(backgroundColor: AppColors.background, body: Center(child: CircularProgressIndicator(color: AppColors.accent)));
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [activeColor.withOpacity(0.3), AppColors.background], stops: const [0.0, 0.4]))),
-          RefreshIndicator(
+      body: RefreshIndicator(
             onRefresh: _loadAllPageData, color: AppColors.accentSecondary, backgroundColor: AppColors.surface,
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -411,8 +400,6 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                 )
               ],
             ),
-          ),
-        ],
       ),
     );
   }
