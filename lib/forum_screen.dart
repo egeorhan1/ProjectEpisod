@@ -37,6 +37,13 @@ class _ForumScreenState extends State<ForumScreen> {
       widget.seasonNumber != null && widget.episodeNumber != null;
 
   @override
+  void dispose() {
+    _commentController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _fetchData();

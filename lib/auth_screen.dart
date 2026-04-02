@@ -16,6 +16,14 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLoading = false;
   bool _isSignUp = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
   Future<void> _handleAuth() async {
     setState(() => _isLoading = true);
     try {

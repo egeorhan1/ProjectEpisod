@@ -45,6 +45,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
 
   // Ekstra Özellikler
   String? trailerKey;
+  List watchProviders = [];
 
   @override
   void initState() {
@@ -59,6 +60,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
       fetchFullDetails(),
       fetchSeriesCast(),
       fetchTrailer(),
+      _fetchWatchProviders(),
     ]);
     if (mounted) setState(() => isInitialLoading = false);
   }
@@ -84,6 +86,34 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
         if (mounted && trailer != null) setState(() => trailerKey = trailer['key']);
       }
     } catch (e) { debugPrint("Trailer error: $e"); }
+  }
+
+  Future<void> _fetchWatchProviders() async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/tv/${widget.show['id']}/watch/providers?api_key=${ApiConfig.apiKey}');
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body)['results'];
+        // Kullanıcının bölgesine göre veya global olarak platformları al
+        // Önce TR, sonra US, sonra ilk bulunan ülke
+        Map? regionData = data['TR'] ?? data['US'];
+        if (regionData == null && data is Map && data.isNotEmpty) {
+          regionData = data.values.first;
+        }
+        if (regionData != null && mounted) {
+          // flatrate (abonelik), buy (satın alma), rent (kiralama) birleştir
+          final List flat = regionData['flatrate'] ?? [];
+          final List buy = regionData['buy'] ?? [];
+          final List rent = regionData['rent'] ?? [];
+          // Tekrarsız birleştir
+          final Map<int, Map> unique = {};
+          for (var p in [...flat, ...buy, ...rent]) {
+            unique[p['provider_id']] = p;
+          }
+          setState(() => watchProviders = unique.values.toList());
+        }
+      }
+    } catch (e) { debugPrint("Watch providers error: $e"); }
   }
 
   Future<void> _launchTrailer() async {
@@ -288,7 +318,7 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (index) {
                   return GestureDetector(
                     onTapDown: (d) { setModalState(() { if (d.localPosition.dx < 20) currentRating = index + 0.5; else currentRating = index + 1.0; }); },
-                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(currentRating >= index + 1 ? Icons.star : currentRating >= index + 0.5 ? Icons.star_half : Icons.star_border, color: currentRating > index ? AppColors.accentSecondary : AppColors.divider, size: 40)),
+                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(currentRating >= index + 1 ? Icons.star : currentRating >= index + 0.5 ? Icons.star_half : Icons.star_border, color: currentRating > index ? AppColors.accentSecondary : AppColors.textMuted, size: 40)),
                   );
                 })),
                 const SizedBox(height: 8),
@@ -382,6 +412,10 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
                       _buildHeader(),
                       const SizedBox(height: 32),
                       _buildOverview(),
+                      if (watchProviders.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildWatchProviders(),
+                      ],
                       const SizedBox(height: 32),
                       _buildRatingsSection(),
                       const SizedBox(height: 32),
@@ -507,6 +541,63 @@ class _ShowDetailScreenState extends State<ShowDetailScreen> {
 
   Widget _actionBtn(IconData i, Color c, VoidCallback t) => GestureDetector(onTap: t, child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8)), child: Icon(i, color: c, size: 20)));
   Widget _sectionHeader(String t, VoidCallback o) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(t, style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)), GestureDetector(onTap: o, child: const Text("View All", style: TextStyle(color: AppColors.accentSecondary, fontWeight: FontWeight.bold, fontSize: 10)))]);
+
+  Widget _buildWatchProviders() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("WHERE TO WATCH", style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 80,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: watchProviders.length,
+            itemBuilder: (context, i) {
+              final p = watchProviders[i];
+              return Container(
+                width: 70,
+                margin: const EdgeInsets.only(right: 12),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 3)),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: CachedNetworkImage(
+                          imageUrl: "https://image.tmdb.org/t/p/w92${p['logo_path']}",
+                          fit: BoxFit.cover,
+                          errorWidget: (c, u, e) => Container(
+                            color: AppColors.elevated,
+                            child: const Icon(Icons.tv, color: AppColors.textMuted, size: 20),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      p['provider_name'] ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 9, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
 
   // YENİ: TIKLANABİLİR CAST LİSTESİ
   Widget _buildCastList() => SizedBox(height: 120, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: seriesCast.length, itemBuilder: (context, i) {
